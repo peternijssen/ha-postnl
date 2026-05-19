@@ -1,10 +1,10 @@
 """Sensor for PostNL packages."""
 import logging
 
+from homeassistant.components.sensor import SensorEntity, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers.entity import Entity
+from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.helpers.entity_registry import async_get as async_get_entity_registry
 
@@ -19,7 +19,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     """Set up the PostNL sensor platform."""
     _LOGGER.debug("Setting up PostNL sensors")
 
-    coordinator = PostNLCoordinator(hass)
+    coordinator = PostNLCoordinator(hass, entry)
     await coordinator.async_config_entry_first_refresh()
     
     userinfo = hass.data[DOMAIN][entry.entry_id].get("userinfo", {})
@@ -46,7 +46,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_e
     ])
     _LOGGER.debug("PostNL sensors added")
 
-class PostNLDelivery(CoordinatorEntity, Entity):
+class PostNLDelivery(CoordinatorEntity, SensorEntity):
+    _attr_icon = "mdi:package-variant-closed"
+    _attr_native_unit_of_measurement = "packages"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
     def __init__(self, coordinator, postnl_userinfo, unique_id, name, receiver: bool = True):
         """Initialize the PostNL sensor."""
         super().__init__(coordinator, context=name)
@@ -75,6 +79,8 @@ class PostNLDelivery(CoordinatorEntity, Entity):
             },
             name=self.postnl_userinfo.get('email'),
             manufacturer="PostNL",
+            entry_type=DeviceEntryType.SERVICE,
+            configuration_url="https://jouw.postnl.nl",
         )
 
     @property
@@ -83,24 +89,14 @@ class PostNLDelivery(CoordinatorEntity, Entity):
         return self._name
 
     @property
-    def state(self):
+    def native_value(self):
         """Return the state of the sensor."""
         return self._state
-
-    @property
-    def unit_of_measurement(self):
-        """Return the unit of measurement of this entity, if any."""
-        return 'packages'
 
     @property
     def extra_state_attributes(self):
         """Return the state attributes."""
         return self._attributes
-
-    @property
-    def icon(self):
-        """Icon to use in the frontend."""
-        return "mdi:package-variant-closed"
 
     @callback
     def _handle_coordinator_update(self) -> None:
@@ -114,10 +110,13 @@ class PostNLDelivery(CoordinatorEntity, Entity):
         self._attributes['delivered'] = []
         self._attributes['enroute'] = []
 
+        if not self.coordinator.data:
+            return
+
         if self.receiver:
-            coordinator_data = self.coordinator.data['receiver']
+            coordinator_data = self.coordinator.data.get('receiver', [])
         else:
-            coordinator_data = self.coordinator.data['sender']
+            coordinator_data = self.coordinator.data.get('sender', [])
 
         for package in coordinator_data:
             if package.delivered:
