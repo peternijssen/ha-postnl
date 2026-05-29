@@ -101,19 +101,29 @@ class AsyncConfigEntryAuth:
 
         _LOGGER.debug("Access token expired, refreshing")
         refresh_token = token.get("refresh_token")
-        if not refresh_token:
-            self._entry.async_start_reauth(self._hass)
-            raise HomeAssistantError("No refresh token available")
+        if refresh_token:
+            try:
+                new_token = await PostNLAuth.async_refresh_token(refresh_token)
+                self._hass.config_entries.async_update_entry(
+                    self._entry,
+                    data={**self._entry.data, "token": new_token},
+                )
+                return new_token["access_token"]
+            except PostNLAuthError as err:
+                _LOGGER.debug("Token refresh failed, falling back to re-login: %s", err)
 
-        try:
-            new_token = await PostNLAuth.async_refresh_token(refresh_token)
-        except PostNLAuthError as err:
-            _LOGGER.debug("Token refresh failed, triggering reauth: %s", err)
-            self._entry.async_start_reauth(self._hass)
-            raise HomeAssistantError("Token refresh failed") from err
+        username = self._entry.data.get("username")
+        password = self._entry.data.get("password")
+        if username and password:
+            try:
+                new_token = await PostNLAuth(username, password).async_login()
+                self._hass.config_entries.async_update_entry(
+                    self._entry,
+                    data={**self._entry.data, "token": new_token},
+                )
+                return new_token["access_token"]
+            except PostNLAuthError as err:
+                _LOGGER.debug("Re-login failed, triggering reauth: %s", err)
 
-        self._hass.config_entries.async_update_entry(
-            self._entry,
-            data={**self._entry.data, "token": new_token},
-        )
-        return new_token["access_token"]
+        self._entry.async_start_reauth(self._hass)
+        raise HomeAssistantError("Unable to obtain a valid token")
