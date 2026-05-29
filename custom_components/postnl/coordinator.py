@@ -3,6 +3,7 @@ import logging
 from datetime import timedelta
 
 import requests
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import (DataUpdateCoordinator,
                                                       UpdateFailed)
@@ -19,7 +20,7 @@ class PostNLCoordinator(DataUpdateCoordinator):
     graphq_api: PostNLGraphql
     jouw_api: PostNLJouwAPI
 
-    def __init__(self, hass: HomeAssistant) -> None:
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         """Initialize PostNL coordinator."""
         super().__init__(
             hass,
@@ -27,6 +28,7 @@ class PostNLCoordinator(DataUpdateCoordinator):
             name="PostNL",
             update_interval=timedelta(seconds=90),
         )
+        self.config_entry = entry
         _LOGGER.debug("PostNLCoordinator initialized with update interval: %s", self.update_interval)
         
     async def _async_update_data(self) -> dict[str, list[Package]]:

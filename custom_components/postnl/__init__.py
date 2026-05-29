@@ -21,7 +21,7 @@ from .login_api import PostNLLoginAPI
 _LOGGER = logging.getLogger(__name__)
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> True:
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up PostNL from config entry."""
     _LOGGER.debug("Setup Entry PostNL")
 
@@ -39,8 +39,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> True:
     hass.data[DOMAIN][entry.entry_id] = {
         'auth': auth
     }
-
-    _LOGGER.debug('Using access token: %s', auth.access_token)
 
     postnl_login_api = PostNLLoginAPI(auth.access_token)
 
@@ -88,7 +86,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> True:
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload PostNL config entry."""
-    _LOGGER.debug('Reloading PostNL integration')
+    _LOGGER.debug('Unloading PostNL integration')
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
     if unload_ok:
@@ -126,7 +124,7 @@ class AsyncConfigEntryAuth:
 
         except (ClientResponseError, ClientError) as exception:
             _LOGGER.debug("API error: %s", exception)
-            if exception.status == 400:
+            if isinstance(exception, ClientResponseError) and exception.status == 400:
                 self.oauth_session.config_entry.async_start_reauth(
                     self.oauth_session.hass
                 )
