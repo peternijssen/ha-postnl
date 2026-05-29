@@ -3,6 +3,7 @@ class Package:
     name: str
     url: str
     shipment_type: str
+    receiver_title: str | None
     status_message: str
     delivered: bool
     delivery_date: str | None
@@ -20,6 +21,7 @@ class Package:
             shipment_type: str,
             status_message: str,
             delivered: bool,
+            receiver_title: str | None = None,
             delivery_date: str | None = None,
             delivery_address_type: str | None = None,
             planned_date: str | None = None,
@@ -31,6 +33,7 @@ class Package:
         self.name = name
         self.url = url
         self.shipment_type = shipment_type
+        self.receiver_title = receiver_title
         self.status_message = status_message
         self.delivered = delivered
         self.delivery_date = delivery_date

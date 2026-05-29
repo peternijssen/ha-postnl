@@ -5,6 +5,7 @@ from datetime import timedelta
 import requests
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.update_coordinator import (DataUpdateCoordinator,
                                                       UpdateFailed)
 
@@ -60,6 +61,8 @@ class PostNLCoordinator(DataUpdateCoordinator):
             _LOGGER.info("Updated PostNL data: %d receiver packages, %d sender packages.", len(data['receiver']), len(data['sender']))
 
             return data
+        except HomeAssistantError as exception:
+            raise UpdateFailed("Authentication failed, reauth required") from exception
         except requests.exceptions.RequestException as exception:
             _LOGGER.error("Network error during PostNL data update: %s", exception, exc_info=True)
             raise UpdateFailed("Unable to update PostNL data") from exception
@@ -76,6 +79,7 @@ class PostNLCoordinator(DataUpdateCoordinator):
                     name=shipment.get('title'),
                     url=shipment.get('detailsUrl'),
                     shipment_type=shipment.get('shipmentType'),
+                    receiver_title=(shipment.get('receiverTitle') or '').strip() or None,
                     status_message="Pakket is bezorgd",
                     delivered=shipment.get('delivered'),
                     delivery_date=shipment.get('deliveredTimeStamp'),
@@ -125,6 +129,7 @@ class PostNLCoordinator(DataUpdateCoordinator):
                 name=shipment.get('title'),
                 url=shipment.get('detailsUrl'),
                 shipment_type=shipment.get('shipmentType'),
+                receiver_title=(shipment.get('receiverTitle') or '').strip() or None,
                 status_message=status_message,
                 delivered=shipment.get('delivered'),
                 delivery_date=shipment.get('deliveredTimeStamp'),

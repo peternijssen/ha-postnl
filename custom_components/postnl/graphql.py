@@ -75,6 +75,7 @@ class PostNLGraphql:
           deliveryWindowType
           detailsUrl
           shipmentType
+          receiverTitle
           deliveryAddressType
           sourceAccountId
           sourceDisplayName
