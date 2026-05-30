@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import logging
 import time
 
@@ -10,6 +12,7 @@ from homeassistant.helpers import device_registry as dr, entity_registry as er
 
 from .auth import PostNLAuth, PostNLAuthError
 from .const import DOMAIN, PLATFORMS
+from .coordinator import PostNLCoordinator
 from .graphql import PostNLGraphql
 from .login_api import PostNLLoginAPI
 
@@ -42,6 +45,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         raise ConfigEntryNotReady("Error in retrieving user information from PostNL.")
 
     hass.data[DOMAIN][entry.entry_id]["userinfo"] = userinfo
+
+    coordinator = PostNLCoordinator(hass, entry)
+    hass.data[DOMAIN][entry.entry_id]["coordinator"] = coordinator
 
     device_registry = dr.async_get(hass)
     entity_registry = er.async_get(hass)

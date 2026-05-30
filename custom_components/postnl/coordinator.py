@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import logging
 from datetime import timedelta
@@ -12,12 +14,11 @@ from homeassistant.helpers.update_coordinator import (DataUpdateCoordinator,
 from . import AsyncConfigEntryAuth, PostNLGraphql
 from .const import DOMAIN
 from .jouw_api import PostNLJouwAPI
-from .structs.package import Package
 
 _LOGGER = logging.getLogger(__name__)
 
 class PostNLCoordinator(DataUpdateCoordinator):
-    data: dict[str, list[Package]]
+    data: dict[str, list[dict]]
     graphq_api: PostNLGraphql
     jouw_api: PostNLJouwAPI
 
@@ -27,12 +28,12 @@ class PostNLCoordinator(DataUpdateCoordinator):
             hass,
             _LOGGER,
             name="PostNL",
-            update_interval=timedelta(seconds=90),
+            update_interval=timedelta(minutes=5),
         )
         self.config_entry = entry
         _LOGGER.debug("PostNLCoordinator initialized with update interval: %s", self.update_interval)
         
-    async def _async_update_data(self) -> dict[str, list[Package]]:
+    async def _async_update_data(self) -> dict[str, list[dict]]:
         _LOGGER.debug("Starting data update for PostNL.")
         try:
             auth: AsyncConfigEntryAuth = self.hass.data[DOMAIN][self.config_entry.entry_id]['auth']
@@ -42,7 +43,7 @@ class PostNLCoordinator(DataUpdateCoordinator):
             self.graphq_api = PostNLGraphql(auth.access_token)
             self.jouw_api = PostNLJouwAPI(auth.access_token)
 
-            data: dict[str, list[Package]] = {
+            data: dict[str, list[dict]] = {
                 'receiver': [],
                 'sender': []
             }
@@ -67,24 +68,30 @@ class PostNLCoordinator(DataUpdateCoordinator):
             _LOGGER.error("Network error during PostNL data update: %s", exception, exc_info=True)
             raise UpdateFailed("Unable to update PostNL data") from exception
 
-    async def transform_shipment(self, shipment) -> Package:
+    async def transform_shipment(self, shipment) -> dict:
         _LOGGER.debug('Updating %s', shipment.get('key'))
 
         try:
             if shipment.get('delivered'):
                 _LOGGER.debug('%s already delivered, no need to call jouw.postnl.', shipment.get('key'))
 
-                return Package(
-                    key=shipment.get('key'),
-                    name=shipment.get('title'),
-                    url=shipment.get('detailsUrl'),
-                    shipment_type=shipment.get('shipmentType'),
-                    receiver_title=(shipment.get('receiverTitle') or '').strip() or None,
-                    status_message="Pakket is bezorgd",
-                    delivered=shipment.get('delivered'),
-                    delivery_date=shipment.get('deliveredTimeStamp'),
-                    delivery_address_type=shipment.get('deliveryAddressType')
-                )
+                return {
+                    "key": shipment.get('key'),
+                    "barcode": shipment.get('barcode'),
+                    "name": shipment.get('title'),
+                    "url": shipment.get('detailsUrl'),
+                    "shipment_type": shipment.get('shipmentType'),
+                    "receiver_title": (shipment.get('receiverTitle') or '').strip() or None,
+                    "source_display_name": (shipment.get('sourceDisplayName') or '').strip() or None,
+                    "status_message": "Pakket is bezorgd",
+                    "delivered": shipment.get('delivered'),
+                    "delivery_date": shipment.get('deliveredTimeStamp'),
+                    "delivery_address_type": shipment.get('deliveryAddressType'),
+                    "planned_date": None,
+                    "planned_from": None,
+                    "planned_to": None,
+                    "expected_datetime": None,
+                }
 
             _LOGGER.debug("Fetching Track and Trace details for shipment %s.", shipment['key'])
             track_and_trace_details = await self.hass.async_add_executor_job(self.jouw_api.track_and_trace,
@@ -96,6 +103,7 @@ class PostNLCoordinator(DataUpdateCoordinator):
             colli = track_and_trace_details.get('colli', {}).get(shipment['barcode'], {})
 
             status_message = "Unknown"
+            planned_date = planned_from = planned_to = expected_datetime = None
 
             if colli:
                 _LOGGER.debug("Colli details found for shipment %s: %s", shipment['key'], colli)
@@ -109,36 +117,35 @@ class PostNLCoordinator(DataUpdateCoordinator):
                     planned_date = colli.get('eta', {}).get('start')
                     planned_from = colli.get('eta', {}).get('start')
                     planned_to = colli.get('eta', {}).get('end')
-                    expected_datetime = None
                 else:
-                    planned_date = shipment.get('deliveryWindowFrom', None)
-                    planned_from = shipment.get('deliveryWindowFrom', None)
-                    planned_to = shipment.get('deliveryWindowTo', None)
-                    expected_datetime = None
+                    planned_date = shipment.get('deliveryWindowFrom')
+                    planned_from = shipment.get('deliveryWindowFrom')
+                    planned_to = shipment.get('deliveryWindowTo')
 
                 status_message = colli.get('statusPhase', {}).get('message', "Unknown")
             else:
                 _LOGGER.warning("Barcode not found in colli details for shipment %s.", shipment['key'])
-                planned_date = shipment.get('deliveryWindowFrom', None)
-                planned_from = shipment.get('deliveryWindowFrom', None)
-                planned_to = shipment.get('deliveryWindowTo', None)
-                expected_datetime = None
+                planned_date = shipment.get('deliveryWindowFrom')
+                planned_from = shipment.get('deliveryWindowFrom')
+                planned_to = shipment.get('deliveryWindowTo')
 
-            return Package(
-                key=shipment.get('key'),
-                name=shipment.get('title'),
-                url=shipment.get('detailsUrl'),
-                shipment_type=shipment.get('shipmentType'),
-                receiver_title=(shipment.get('receiverTitle') or '').strip() or None,
-                status_message=status_message,
-                delivered=shipment.get('delivered'),
-                delivery_date=shipment.get('deliveredTimeStamp'),
-                delivery_address_type=shipment.get('deliveryAddressType'),
-                planned_date=planned_date,
-                planned_from=planned_from,
-                planned_to=planned_to,
-                expected_datetime=expected_datetime
-            )
+            return {
+                "key": shipment.get('key'),
+                "barcode": shipment.get('barcode'),
+                "name": shipment.get('title'),
+                "url": shipment.get('detailsUrl'),
+                "shipment_type": shipment.get('shipmentType'),
+                "receiver_title": (shipment.get('receiverTitle') or '').strip() or None,
+                "source_display_name": (shipment.get('sourceDisplayName') or '').strip() or None,
+                "status_message": status_message,
+                "delivered": shipment.get('delivered'),
+                "delivery_date": shipment.get('deliveredTimeStamp'),
+                "delivery_address_type": shipment.get('deliveryAddressType'),
+                "planned_date": planned_date,
+                "planned_from": planned_from,
+                "planned_to": planned_to,
+                "expected_datetime": expected_datetime,
+            }
         except requests.exceptions.RequestException as exception:
             _LOGGER.error("Error fetching Track and Trace details for shipment %s: %s", shipment.get('key'), exception, exc_info=True)
             raise UpdateFailed("Unable to update PostNL data") from exception

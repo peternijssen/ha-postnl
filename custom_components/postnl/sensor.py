@@ -1,127 +1,320 @@
-"""Sensor for PostNL packages."""
-import logging
+"""Sensor platform for the PostNL integration."""
+from __future__ import annotations
 
-from homeassistant.components.sensor import SensorEntity, SensorStateClass
+import logging
+from datetime import datetime, timezone
+from typing import Any
+
+from homeassistant.components.sensor import SensorDeviceClass, SensorEntity, SensorStateClass
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.device_registry import DeviceEntryType
+from homeassistant.helpers.entity import DeviceInfo
+from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from homeassistant.helpers.entity_registry import async_get as async_get_entity_registry
 
 from . import DOMAIN
 from .coordinator import PostNLCoordinator
-from .structs.package import Package
 
 _LOGGER = logging.getLogger(__name__)
 
+DELIVERY_ADDRESS_SERVICE_POINT = "ServicePoint"
 
-async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, async_add_entities):
-    """Set up the PostNL sensor platform."""
-    _LOGGER.debug("Setting up PostNL sensors")
 
-    coordinator = PostNLCoordinator(hass, entry)
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: ConfigEntry,
+    async_add_entities: AddEntitiesCallback,
+) -> None:
+    """Set up PostNL sensor entities from a config entry."""
+    data = hass.data[DOMAIN][entry.entry_id]
+    userinfo: dict[str, Any] = data.get("userinfo", {})
+    account_id: str = userinfo.get("account_id", "")
+
+    coordinator: PostNLCoordinator = data["coordinator"]
     await coordinator.async_config_entry_first_refresh()
-    
-    userinfo = hass.data[DOMAIN][entry.entry_id].get("userinfo", {})
-    if not userinfo:
-        _LOGGER.error("No userinfo found for PostNL entry")
-        return
-    
-    _LOGGER.debug("Userinfo loaded: %s", userinfo)
 
-    async_add_entities([
-        PostNLDelivery(
+    receiver_parcels: list[dict] = _active_receiver(coordinator)
+    current_barcodes: set[str] = {p["barcode"] for p in receiver_parcels if p.get("barcode")}
+
+    # Remove stale per-parcel sensors that are no longer active.
+    registry = er.async_get(hass)
+    non_parcel_unique_ids = {
+        f"{account_id}_incoming_parcels",
+        f"{account_id}_next_delivery",
+        f"{account_id}_en_route_to_service_point",
+        f"{account_id}_outgoing_parcels",
+    }
+    for entity_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
+        if (
+            entity_entry.unique_id.startswith(f"{account_id}_")
+            and entity_entry.unique_id not in non_parcel_unique_ids
+        ):
+            barcode = entity_entry.unique_id[len(f"{account_id}_"):]
+            if barcode not in current_barcodes:
+                registry.async_remove(entity_entry.entity_id)
+
+    entities: list[SensorEntity] = [
+        PostNLIncomingParcelsSensor(
             coordinator=coordinator,
-            postnl_userinfo=userinfo,
-            unique_id= userinfo.get('account_id') + "_" + "delivery",
-            name="PostNL_delivery"
+            userinfo=userinfo,
+            async_add_entities=async_add_entities,
+            known_barcodes=current_barcodes,
         ),
-        PostNLDelivery(
-            coordinator=coordinator,
-            postnl_userinfo=userinfo,
-            name="PostNL_distribution",
-            unique_id=userinfo.get('account_id') + "_" + "distribution",
-            receiver=False
-        )
-    ])
-    _LOGGER.debug("PostNL sensors added")
+        PostNLNextDeliverySensor(coordinator=coordinator, userinfo=userinfo),
+        PostNLEnRouteToServicePointSensor(coordinator=coordinator, userinfo=userinfo),
+        PostNLOutgoingParcelsSensor(coordinator=coordinator, userinfo=userinfo),
+    ]
 
-class PostNLDelivery(CoordinatorEntity, SensorEntity):
+    for parcel in receiver_parcels:
+        if parcel.get("barcode"):
+            entities.append(PostNLParcelSensor(coordinator=coordinator, userinfo=userinfo, barcode=parcel["barcode"]))
+
+    async_add_entities(entities)
+
+
+def _build_device_info(userinfo: dict[str, Any]) -> DeviceInfo:
+    """Return DeviceInfo shared by all sensors for this account."""
+    return DeviceInfo(
+        identifiers={(DOMAIN, userinfo.get("account_id", ""))},
+        name=userinfo.get("email"),
+        manufacturer="PostNL",
+        entry_type=DeviceEntryType.SERVICE,
+        configuration_url="https://jouw.postnl.nl",
+    )
+
+
+def _active_receiver(coordinator: PostNLCoordinator) -> list[dict]:
+    """Return non-delivered receiver parcels."""
+    return [p for p in (coordinator.data or {}).get("receiver", []) if not p.get("delivered")]
+
+
+class PostNLIncomingParcelsSensor(CoordinatorEntity[PostNLCoordinator], SensorEntity):
+    """Summary sensor for active incoming PostNL parcels.
+
+    Also manages the lifecycle of per-parcel :class:`PostNLParcelSensor`
+    entities: new barcodes are added and delivered barcodes are removed from
+    the entity registry whenever the coordinator data changes.
+    """
+
+    _attr_name = "PostNL Incoming Parcels"
     _attr_icon = "mdi:package-variant-closed"
-    _attr_native_unit_of_measurement = "packages"
+    _attr_native_unit_of_measurement = "parcels"
     _attr_state_class = SensorStateClass.MEASUREMENT
 
-    def __init__(self, coordinator, postnl_userinfo, unique_id, name, receiver: bool = True):
-        """Initialize the PostNL sensor."""
-        super().__init__(coordinator, context=name)
-        self.postnl_userinfo = postnl_userinfo
-        self._unique_id = unique_id
-        self._name: str = name
-        self._attributes: dict[str, list[Package]] = {
-            'enroute': [],
-            'delivered': [],
-        }
-        self._state = None
-        self.receiver: bool = receiver
-        self.handle_coordinator_data()
+    def __init__(
+        self,
+        coordinator: PostNLCoordinator,
+        userinfo: dict[str, Any],
+        async_add_entities: AddEntitiesCallback,
+        known_barcodes: set[str] | None = None,
+    ) -> None:
+        super().__init__(coordinator)
+        self._userinfo = userinfo
+        self._async_add_entities = async_add_entities
+        account_id: str = userinfo.get("account_id", "")
+        self._attr_unique_id = f"{account_id}_incoming_parcels"
+        self._attr_device_info = _build_device_info(userinfo)
+        self._known_barcodes: set[str] = known_barcodes or set()
 
     @property
-    def unique_id(self) -> str | None:
-        """Return the unique id of the sensor."""
-        return self._unique_id
+    def native_value(self) -> int:
+        return len(_active_receiver(self.coordinator))
 
     @property
-    def device_info(self) -> DeviceInfo:
-        """Return the device info."""
-        return DeviceInfo(
-            identifiers={
-                (DOMAIN, self.postnl_userinfo.get('account_id'))
-            },
-            name=self.postnl_userinfo.get('email'),
-            manufacturer="PostNL",
-            entry_type=DeviceEntryType.SERVICE,
-            configuration_url="https://jouw.postnl.nl",
-        )
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {"parcels": _active_receiver(self.coordinator)}
 
-    @property
-    def name(self) -> str:
-        """Return the name of the sensor."""
-        return self._name
-
-    @property
-    def native_value(self):
-        """Return the state of the sensor."""
-        return self._state
-
-    @property
-    def extra_state_attributes(self):
-        """Return the state attributes."""
-        return self._attributes
-
-    @callback
     def _handle_coordinator_update(self) -> None:
-        _LOGGER.debug('Updating sensor %s', self.name)
+        current_parcels = _active_receiver(self.coordinator)
+        current_barcodes = {p["barcode"] for p in current_parcels if p.get("barcode")}
 
-        self.handle_coordinator_data()
+        new_barcodes = current_barcodes - self._known_barcodes
+        if new_barcodes:
+            self._async_add_entities([
+                PostNLParcelSensor(coordinator=self.coordinator, userinfo=self._userinfo, barcode=b)
+                for b in new_barcodes
+            ])
 
-        self.async_write_ha_state()
+        stale_barcodes = self._known_barcodes - current_barcodes
+        if stale_barcodes and self.hass is not None:
+            registry = er.async_get(self.hass)
+            account_id: str = self._userinfo.get("account_id", "")
+            for barcode in stale_barcodes:
+                entity_id = registry.async_get_entity_id("sensor", DOMAIN, f"{account_id}_{barcode}")
+                if entity_id:
+                    registry.async_remove(entity_id)
 
-    def handle_coordinator_data(self):
-        self._attributes['delivered'] = []
-        self._attributes['enroute'] = []
+        self._known_barcodes = current_barcodes
+        super()._handle_coordinator_update()
 
-        if not self.coordinator.data:
-            return
 
-        if self.receiver:
-            coordinator_data = self.coordinator.data.get('receiver', [])
-        else:
-            coordinator_data = self.coordinator.data.get('sender', [])
+class PostNLParcelSensor(CoordinatorEntity[PostNLCoordinator], SensorEntity):
+    """Per-parcel sensor for a single active incoming PostNL shipment."""
 
-        for package in coordinator_data:
-            if package.delivered:
-                self._attributes['delivered'].append(vars(package))
-            else:
-                self._attributes['enroute'].append(vars(package))
+    _attr_icon = "mdi:package-variant-closed"
 
-        self._state = len(self._attributes['enroute'])
+    def __init__(
+        self,
+        coordinator: PostNLCoordinator,
+        userinfo: dict[str, Any],
+        barcode: str,
+    ) -> None:
+        super().__init__(coordinator)
+        self._barcode = barcode
+        account_id: str = userinfo.get("account_id", "")
+        self._attr_unique_id = f"{account_id}_{barcode}"
+        self._attr_name = f"PostNL Parcel {barcode}"
+        self._attr_device_info = _build_device_info(userinfo)
+
+    def _get_parcel(self) -> dict | None:
+        for parcel in _active_receiver(self.coordinator):
+            if parcel.get("barcode") == self._barcode:
+                return parcel
+        return None
+
+    @property
+    def native_value(self) -> str | None:
+        parcel = self._get_parcel()
+        return parcel.get("status_message") if parcel else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        parcel = self._get_parcel()
+        return dict(parcel) if parcel else {}
+
+
+class PostNLNextDeliverySensor(CoordinatorEntity[PostNLCoordinator], SensorEntity):
+    """Sensor reporting the earliest expected delivery datetime across all active incoming parcels."""
+
+    _attr_name = "PostNL Next Delivery"
+    _attr_icon = "mdi:clock-fast"
+    _attr_device_class = SensorDeviceClass.TIMESTAMP
+
+    def __init__(
+        self,
+        coordinator: PostNLCoordinator,
+        userinfo: dict[str, Any],
+    ) -> None:
+        super().__init__(coordinator)
+        account_id: str = userinfo.get("account_id", "")
+        self._attr_unique_id = f"{account_id}_next_delivery"
+        self._attr_device_info = _build_device_info(userinfo)
+
+    def _delivery_moments(self) -> list[tuple[datetime, dict]]:
+        result: list[tuple[datetime, dict]] = []
+        for parcel in _active_receiver(self.coordinator):
+            moment_str = parcel.get("planned_from") or parcel.get("planned_date")
+            if not moment_str:
+                continue
+            try:
+                dt = datetime.fromisoformat(moment_str.replace("Z", "+00:00"))
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                result.append((dt, parcel))
+            except ValueError:
+                _LOGGER.debug("Could not parse delivery moment: %s", moment_str)
+        return result
+
+    @property
+    def native_value(self) -> datetime | None:
+        moments = self._delivery_moments()
+        return min(dt for dt, _ in moments) if moments else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        moments = self._delivery_moments()
+        if not moments:
+            return {}
+        _, earliest = min(moments, key=lambda x: x[0])
+        return {
+            "barcode": earliest.get("barcode"),
+            "sender": earliest.get("source_display_name"),
+        }
+
+
+class PostNLEnRouteToServicePointSensor(CoordinatorEntity[PostNLCoordinator], SensorEntity):
+    """Sensor reporting active incoming parcels destined for a PostNL point."""
+
+    _attr_name = "PostNL Parcels En Route to PostNL Point"
+    _attr_icon = "mdi:truck-delivery"
+    _attr_native_unit_of_measurement = "parcels"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(
+        self,
+        coordinator: PostNLCoordinator,
+        userinfo: dict[str, Any],
+    ) -> None:
+        super().__init__(coordinator)
+        account_id: str = userinfo.get("account_id", "")
+        self._attr_unique_id = f"{account_id}_en_route_to_service_point"
+        self._attr_device_info = _build_device_info(userinfo)
+
+    def _get_service_point_parcels(self) -> list[dict]:
+        return [
+            p for p in _active_receiver(self.coordinator)
+            if p.get("delivery_address_type") == DELIVERY_ADDRESS_SERVICE_POINT
+        ]
+
+    @property
+    def native_value(self) -> int:
+        return len(self._get_service_point_parcels())
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {
+            "parcels": [
+                {
+                    "barcode": p.get("barcode"),
+                    "sender": p.get("source_display_name"),
+                    "status": p.get("status_message"),
+                }
+                for p in self._get_service_point_parcels()
+            ]
+        }
+
+
+class PostNLOutgoingParcelsSensor(CoordinatorEntity[PostNLCoordinator], SensorEntity):
+    """Summary sensor for active outgoing PostNL shipments."""
+
+    _attr_name = "PostNL Outgoing Parcels"
+    _attr_icon = "mdi:package-variant-closed"
+    _attr_native_unit_of_measurement = "parcels"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(
+        self,
+        coordinator: PostNLCoordinator,
+        userinfo: dict[str, Any],
+    ) -> None:
+        super().__init__(coordinator)
+        account_id: str = userinfo.get("account_id", "")
+        self._attr_unique_id = f"{account_id}_outgoing_parcels"
+        self._attr_device_info = _build_device_info(userinfo)
+
+    def _active_sender(self) -> list[dict]:
+        return [p for p in (self.coordinator.data or {}).get("sender", []) if not p.get("delivered")]
+
+    @property
+    def native_value(self) -> int:
+        return len(self._active_sender())
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {
+            "shipments": [
+                {
+                    "barcode": p.get("barcode"),
+                    "key": p.get("key"),
+                    "status": p.get("status_message"),
+                    "shipment_type": p.get("shipment_type"),
+                    "receiver": p.get("receiver_title"),
+                    "planned_date": p.get("planned_date"),
+                    "planned_from": p.get("planned_from"),
+                    "planned_to": p.get("planned_to"),
+                }
+                for p in self._active_sender()
+            ]
+        }

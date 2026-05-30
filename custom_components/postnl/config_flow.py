@@ -1,18 +1,19 @@
+from __future__ import annotations
+
 import logging
 from typing import Any
 
 import aiohttp
 import voluptuous as vol
-from homeassistant.config_entries import ConfigEntry, ConfigFlow
+from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
 from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
-from homeassistant.data_entry_flow import FlowResult
 
 from .auth import PostNLAuth, PostNLAuthError
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
-_STEP_SCHEMA = vol.Schema({
+_USER_SCHEMA = vol.Schema({
     vol.Required(CONF_USERNAME): str,
     vol.Required(CONF_PASSWORD): str,
 })
@@ -21,9 +22,7 @@ _STEP_SCHEMA = vol.Schema({
 class PostNLConfigFlow(ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
-    _reauth_entry: ConfigEntry | None = None
-
-    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         errors: dict[str, str] = {}
 
         if user_input is not None:
@@ -42,37 +41,35 @@ class PostNLConfigFlow(ConfigFlow, domain=DOMAIN):
 
         return self.async_show_form(
             step_id="user",
-            data_schema=_STEP_SCHEMA,
+            data_schema=_USER_SCHEMA,
             errors=errors,
         )
 
-    async def async_step_reauth(self, user_input=None) -> FlowResult:
-        self._reauth_entry = self.hass.config_entries.async_get_entry(
-            self.context["entry_id"]
-        )
+    async def async_step_reauth(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         return await self.async_step_reauth_confirm()
 
-    async def async_step_reauth_confirm(self, user_input: dict[str, Any] | None = None) -> FlowResult:
+    async def async_step_reauth_confirm(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         errors: dict[str, str] = {}
 
         if user_input is not None:
             token, errors = await self._do_login(user_input)
             if not errors:
+                reauth_entry = self._get_reauth_entry()
                 self.hass.config_entries.async_update_entry(
-                    self._reauth_entry,
+                    reauth_entry,
                     data={
-                        **self._reauth_entry.data,
+                        **reauth_entry.data,
                         CONF_USERNAME: user_input[CONF_USERNAME],
                         CONF_PASSWORD: user_input[CONF_PASSWORD],
                         "token": token,
                     },
                 )
-                await self.hass.config_entries.async_reload(self._reauth_entry.entry_id)
+                await self.hass.config_entries.async_reload(reauth_entry.entry_id)
                 return self.async_abort(reason="reauth_successful")
 
         return self.async_show_form(
             step_id="reauth_confirm",
-            data_schema=_STEP_SCHEMA,
+            data_schema=_USER_SCHEMA,
             errors=errors,
         )
 
