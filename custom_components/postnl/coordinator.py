@@ -11,8 +11,9 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.update_coordinator import (DataUpdateCoordinator,
                                                       UpdateFailed)
 
-from . import AsyncConfigEntryAuth, PostNLGraphql
+from .auth import AsyncConfigEntryAuth
 from .const import DOMAIN
+from .graphql import PostNLGraphql
 from .jouw_api import PostNLJouwAPI
 
 _LOGGER = logging.getLogger(__name__)
