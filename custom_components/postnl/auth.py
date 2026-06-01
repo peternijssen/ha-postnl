@@ -11,7 +11,7 @@ from urllib.parse import parse_qs, urlparse
 import aiohttp
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import ConfigEntryAuthFailed
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -279,8 +279,7 @@ class AsyncConfigEntryAuth:
         token = self._entry.data.get("token")
 
         if not token or "access_token" not in token:
-            self._entry.async_start_reauth(self._hass)
-            raise HomeAssistantError("No valid token in config entry, reauth required")
+            raise ConfigEntryAuthFailed("No valid token in config entry")
 
         if time.time() < token.get("expires_at", 0) - 30:
             return token["access_token"]
@@ -311,5 +310,4 @@ class AsyncConfigEntryAuth:
             except PostNLAuthError as err:
                 _LOGGER.debug("Re-login failed, triggering reauth: %s", err)
 
-        self._entry.async_start_reauth(self._hass)
-        raise HomeAssistantError("Unable to obtain a valid token")
+        raise ConfigEntryAuthFailed("Unable to obtain a valid token")

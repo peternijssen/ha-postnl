@@ -7,7 +7,7 @@ from datetime import timedelta
 import requests
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
 from homeassistant.helpers.update_coordinator import (DataUpdateCoordinator,
                                                       UpdateFailed)
 
@@ -63,8 +63,10 @@ class PostNLCoordinator(DataUpdateCoordinator):
             _LOGGER.info("Updated PostNL data: %d receiver packages, %d sender packages.", len(data['receiver']), len(data['sender']))
 
             return data
+        except ConfigEntryAuthFailed:
+            raise
         except HomeAssistantError as exception:
-            raise UpdateFailed("Authentication failed, reauth required") from exception
+            raise UpdateFailed("Authentication failed") from exception
         except requests.exceptions.RequestException as exception:
             _LOGGER.error("Network error during PostNL data update: %s", exception, exc_info=True)
             raise UpdateFailed("Unable to update PostNL data") from exception
