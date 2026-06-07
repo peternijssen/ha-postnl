@@ -12,7 +12,7 @@ from homeassistant.helpers.update_coordinator import (DataUpdateCoordinator,
                                                       UpdateFailed)
 
 from .auth import AsyncConfigEntryAuth
-from .const import DOMAIN
+from .const import DOMAIN, POLL_INTERVAL
 from .graphql import PostNLGraphql
 from .jouw_api import PostNLJouwAPI
 
@@ -29,7 +29,7 @@ class PostNLCoordinator(DataUpdateCoordinator):
             hass,
             _LOGGER,
             name="PostNL",
-            update_interval=timedelta(minutes=5),
+            update_interval=timedelta(seconds=POLL_INTERVAL),
         )
         self.config_entry = entry
         _LOGGER.debug("PostNLCoordinator initialized with update interval: %s", self.update_interval)
