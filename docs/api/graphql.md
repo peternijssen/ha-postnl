@@ -107,7 +107,7 @@ fragment shipment on TrackedShipmentResultType {
           "key": "3SABCD1234567890-NL-1234AB",
           "creationDateTime": "2026-05-28T08:17:22+02:00",
           "barcode": "3SABCD1234567890",
-          "title": "Bol.com",
+          "title": "Online Retailer",
           "delivered": false,
           "deliveredTimeStamp": null,
           "deliveryWindowFrom": "2026-05-29T12:00:00",

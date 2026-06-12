@@ -146,7 +146,8 @@ class PostNLCoordinator(DataUpdateCoordinator):
                                                                              shipment['key'])
 
             if not track_and_trace_details.get('colli'):
-                _LOGGER.warning("No colli found for shipment %s. Details: %s", shipment['key'], track_and_trace_details)
+                _LOGGER.warning("No colli found for shipment %s.", shipment['key'])
+                _LOGGER.debug("Track and Trace response: %s", track_and_trace_details)
 
             colli = track_and_trace_details.get('colli', {}).get(shipment['barcode'], {})
 
