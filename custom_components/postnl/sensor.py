@@ -19,9 +19,6 @@ from .coordinator import PostNLCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-DELIVERY_ADDRESS_SERVICE_POINT = "ServicePoint"
-
-
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -179,7 +176,7 @@ class PostNLParcelSensor(CoordinatorEntity[PostNLCoordinator], SensorEntity):
     @property
     def native_value(self) -> str | None:
         parcel = self._get_parcel()
-        return parcel.get("status_message") if parcel else None
+        return parcel.get("status") if parcel else None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -207,7 +204,7 @@ class PostNLNextDeliverySensor(CoordinatorEntity[PostNLCoordinator], SensorEntit
     def _delivery_moments(self) -> list[tuple[datetime, dict]]:
         result: list[tuple[datetime, dict]] = []
         for parcel in _active_receiver(self.coordinator):
-            moment_str = parcel.get("planned_from") or parcel.get("planned_date")
+            moment_str = parcel.get("planned_from")
             if not moment_str:
                 continue
             try:
@@ -232,7 +229,7 @@ class PostNLNextDeliverySensor(CoordinatorEntity[PostNLCoordinator], SensorEntit
         _, earliest = min(moments, key=lambda x: x[0])
         return {
             "barcode": earliest.get("barcode"),
-            "sender": earliest.get("source_display_name"),
+            "sender": earliest.get("sender"),
         }
 
 
@@ -257,7 +254,7 @@ class PostNLEnRouteToServicePointSensor(CoordinatorEntity[PostNLCoordinator], Se
     def _get_service_point_parcels(self) -> list[dict]:
         return [
             p for p in _active_receiver(self.coordinator)
-            if p.get("delivery_address_type") == DELIVERY_ADDRESS_SERVICE_POINT
+            if p.get("pickup")
         ]
 
     @property
@@ -266,16 +263,7 @@ class PostNLEnRouteToServicePointSensor(CoordinatorEntity[PostNLCoordinator], Se
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        return {
-            "parcels": [
-                {
-                    "barcode": p.get("barcode"),
-                    "sender": p.get("source_display_name"),
-                    "status": p.get("status_message"),
-                }
-                for p in self._get_service_point_parcels()
-            ]
-        }
+        return {"parcels": self._get_service_point_parcels()}
 
 
 class PostNLOutgoingParcelsSensor(CoordinatorEntity[PostNLCoordinator], SensorEntity):
@@ -305,21 +293,7 @@ class PostNLOutgoingParcelsSensor(CoordinatorEntity[PostNLCoordinator], SensorEn
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        return {
-            "shipments": [
-                {
-                    "barcode": p.get("barcode"),
-                    "key": p.get("key"),
-                    "status": p.get("status_message"),
-                    "shipment_type": p.get("shipment_type"),
-                    "receiver": p.get("receiver_title"),
-                    "planned_date": p.get("planned_date"),
-                    "planned_from": p.get("planned_from"),
-                    "planned_to": p.get("planned_to"),
-                }
-                for p in self._active_sender()
-            ]
-        }
+        return {"shipments": self._active_sender()}
 
 
 class PostNLDeliveredParcelsSensor(CoordinatorEntity[PostNLCoordinator], SensorEntity):
@@ -350,14 +324,4 @@ class PostNLDeliveredParcelsSensor(CoordinatorEntity[PostNLCoordinator], SensorE
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        return {
-            "parcels": [
-                {
-                    "barcode": p.get("barcode"),
-                    "sender": p.get("source_display_name"),
-                    "status": p.get("status_message"),
-                    "delivery_date": p.get("delivery_date"),
-                }
-                for p in self._parcels
-            ]
-        }
+        return {"parcels": self._parcels}

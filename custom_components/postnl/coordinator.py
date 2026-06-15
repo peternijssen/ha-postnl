@@ -27,8 +27,8 @@ _LOGGER = logging.getLogger(__name__)
 
 
 def _delivery_dt(parcel: dict) -> datetime | None:
-    """Parse the delivery datetime from a transformed parcel dict."""
-    date_str = parcel.get("delivery_date")
+    """Parse the delivery datetime from a normalized parcel dict."""
+    date_str = parcel.get("delivered_at")
     if not date_str:
         return None
     try:
@@ -38,6 +38,26 @@ def _delivery_dt(parcel: dict) -> datetime | None:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt
+
+
+def normalize_parcel(parcel: dict) -> dict:
+    """Return a carrier-agnostic parcel dict with the original PostNL payload under ``raw``."""
+    delivered = bool(parcel.get("delivered"))
+    is_pickup = parcel.get("delivery_address_type") == "ServicePoint"
+    return {
+        "carrier": "PostNL",
+        "barcode": parcel.get("barcode"),
+        "sender": parcel.get("source_display_name"),
+        "status": parcel.get("status_message"),
+        "delivered": delivered,
+        "delivered_at": parcel.get("delivery_date") if delivered else None,
+        "planned_from": None if delivered else parcel.get("planned_from"),
+        "planned_to": None if delivered else parcel.get("planned_to"),
+        "pickup": is_pickup,
+        "pickup_point": None,
+        "url": parcel.get("url"),
+        "raw": parcel,
+    }
 
 
 class PostNLCoordinator(DataUpdateCoordinator):
@@ -92,9 +112,11 @@ class PostNLCoordinator(DataUpdateCoordinator):
             )
 
             return data
-        except ConfigEntryAuthFailed:
+        except ConfigEntryAuthFailed as exception:
+            _LOGGER.error("PostNL authentication failed: %s", exception)
             raise
         except HomeAssistantError as exception:
+            _LOGGER.error("PostNL authentication failed: %s", exception)
             raise UpdateFailed("Authentication failed") from exception
         except requests.exceptions.RequestException as exception:
             _LOGGER.error("Network error during PostNL data update: %s", exception, exc_info=True)
@@ -119,7 +141,7 @@ class PostNLCoordinator(DataUpdateCoordinator):
             if shipment.get('delivered'):
                 _LOGGER.debug('%s already delivered, no need to call jouw.postnl.', shipment.get('key'))
 
-                return {
+                parcel = {
                     "key": shipment.get('key'),
                     "barcode": shipment.get('barcode'),
                     "name": shipment.get('title'),
@@ -140,6 +162,7 @@ class PostNLCoordinator(DataUpdateCoordinator):
                     "planned_to": None,
                     "expected_datetime": None,
                 }
+                return normalize_parcel(parcel)
 
             _LOGGER.debug("Fetching Track and Trace details for shipment %s.", shipment['key'])
             track_and_trace_details = await self.hass.async_add_executor_job(self.jouw_api.track_and_trace,
@@ -178,7 +201,7 @@ class PostNLCoordinator(DataUpdateCoordinator):
                 planned_from = shipment.get('deliveryWindowFrom')
                 planned_to = shipment.get('deliveryWindowTo')
 
-            return {
+            parcel = {
                 "key": shipment.get('key'),
                 "barcode": shipment.get('barcode'),
                 "name": shipment.get('title'),
@@ -199,6 +222,7 @@ class PostNLCoordinator(DataUpdateCoordinator):
                 "planned_to": planned_to,
                 "expected_datetime": expected_datetime,
             }
+            return normalize_parcel(parcel)
         except requests.exceptions.RequestException as exception:
             _LOGGER.error("Error fetching Track and Trace details for shipment %s: %s", shipment.get('key'), exception, exc_info=True)
             raise UpdateFailed("Unable to update PostNL data") from exception

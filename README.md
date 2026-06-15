@@ -49,6 +49,8 @@ A custom Home Assistant integration that tracks your incoming and outgoing PostN
 
 The delivered-parcels filter (last N days, or N most recent) can be changed at any time via **Settings → Devices & Services → PostNL → Configure**. Changes take effect on the next refresh — no reload required.
 
+Every parcel exposed on a sensor attribute uses a carrier-agnostic shape — top-level keys are `carrier`, `barcode`, `sender`, `status`, `delivered`, `delivered_at`, `planned_from`, `planned_to`, `pickup`, `pickup_point`, `url`. The original PostNL payload is preserved under `raw` for anyone who needs it. This lets the [parcel aggregator](https://github.com/peternijssen/ha-parcel-aggregator) and any cross-carrier dashboard read parcels from DHL, PostNL and DPD the same way.
+
 For full attribute reference and example automations see [docs/sensors.md](docs/sensors.md).
 
 ## Troubleshooting

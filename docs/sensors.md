@@ -2,6 +2,8 @@
 
 Full reference for all sensors provided by the PostNL integration.
 
+> **Parcel shape:** every parcel exposed on a sensor attribute carries the carrier-agnostic top-level keys `carrier`, `barcode`, `sender`, `status`, `delivered`, `delivered_at`, `planned_from`, `planned_to`, `pickup`, `pickup_point`, `url`, plus the original PostNL payload under `raw`. See [docs/api/graphql.md → Carrier-agnostic shape exposed by sensors](api/graphql.md#carrier-agnostic-shape-exposed-by-sensors) for the source mapping.
+
 ## Incoming parcels
 
 ### `sensor.<account>_postnl_incoming_parcels`
@@ -12,7 +14,7 @@ Summary sensor showing how many parcels are currently on their way to you.
 
 | Attribute | Description |
 |-----------|-------------|
-| `parcels` | List of all active incoming parcel objects |
+| `parcels` | List of normalized active incoming parcels (full shape including `raw`) |
 
 ### `sensor.<account>_postnl_parcel_<barcode>`
 
@@ -20,7 +22,7 @@ One sensor per active incoming shipment. Created automatically when a new parcel
 
 **State:** status message (e.g. `Pakket is onderweg`, `Pakket wordt bezorgd`)
 
-**Attributes:** all fields from the Package object, including barcode, planned delivery times, status, and shipment type.
+**Attributes:** the full normalized parcel dict (top-level fields plus `raw`).
 
 ### `sensor.<account>_postnl_next_delivery`
 
@@ -50,7 +52,30 @@ Parcels destined for a PostNL pickup point that have not yet been collected.
 
 | Attribute | Description |
 |-----------|-------------|
-| `parcels` | List of parcels, each with `barcode`, `sender`, and `status` |
+| `parcels` | List of normalized parcels destined for a PostNL point (full shape including `raw`) |
+
+### `sensor.<account>_postnl_delivered_parcels`
+
+Recently delivered incoming parcels. The number of parcels shown is controlled by the integration options (see [Configuration](#configuration)).
+
+**State:** number of delivered parcels shown (unit: `parcels`)
+
+| Attribute | Description |
+|-----------|-------------|
+| `parcels` | List of normalized delivered parcels (full shape including `raw`) |
+
+---
+
+## Configuration
+
+After the initial setup you can configure the delivered parcels filter via **Settings → Devices & Services → PostNL → Configure**:
+
+| Option | Description |
+|--------|-------------|
+| **Filter by** | `Days` — show parcels delivered in the last N days. `Number of parcels` — show the N most recent deliveries. |
+| **Amount** | The number of days or parcels (1–365). Default: **7 days**. |
+
+Changes take effect on the next data refresh without requiring a restart.
 
 ---
 
@@ -64,7 +89,7 @@ Summary sensor showing how many packages you have sent that are still in transit
 
 | Attribute | Description |
 |-----------|-------------|
-| `shipments` | List of active outgoing shipment objects, each containing `barcode`, `key`, `status`, `shipment_type`, `receiver`, `planned_date`, `planned_from`, and `planned_to` |
+| `shipments` | List of normalized active outgoing shipments (full shape including `raw` — PostNL-specific fields like `key`, `receiver_title`, `planned_date`, `expected_datetime` live under `raw`) |
 
 ---
 

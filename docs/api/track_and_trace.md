@@ -58,7 +58,7 @@ The response is keyed by barcode. The integration looks up `colli[shipment.barco
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `statusPhase.message` | string | Human-readable current status, e.g. `"Pakket is onderweg"`. Used as the sensor's `status_message` attribute. |
+| `statusPhase.message` | string | Human-readable current status, e.g. `"Pakket is onderweg"`. Surfaced as the sensor's top-level `status` attribute. |
 | `routeInformation` | object\|null | Present when the carrier has live route data |
 | `routeInformation.plannedDeliveryTime` | string\|null | Single planned delivery timestamp |
 | `routeInformation.plannedDeliveryTimeWindow.startDateTime` | string\|null | Start of the delivery window |
@@ -78,13 +78,15 @@ The coordinator resolves delivery timing in this order:
 
 ## How the integration uses this endpoint
 
-| API field | `Package` attribute |
-|-----------|---------------------|
-| `statusPhase.message` | `status_message` |
-| `plannedDeliveryTime` / `eta.start` | `planned_date` |
-| `startDateTime` / `eta.start` | `planned_from` |
-| `endDateTime` / `eta.end` | `planned_to` |
-| `expectedDeliveryTime` | `expected_datetime` |
+These fields are first written to the internal transformed-shipment dict (under the legacy keys below) and then projected onto the carrier-agnostic shape exposed by the sensors. The transformed dict is preserved under each parcel's `raw` attribute.
+
+| API field | Internal key (under `raw`) | Carrier-agnostic top-level key |
+|-----------|----------------------------|-------------------------------|
+| `statusPhase.message` | `status_message` | `status` |
+| `plannedDeliveryTime` / `eta.start` | `planned_date` | — |
+| `startDateTime` / `eta.start` | `planned_from` | `planned_from` |
+| `endDateTime` / `eta.end` | `planned_to` | `planned_to` |
+| `expectedDeliveryTime` | `expected_datetime` | — |
 
 ## Error handling
 

@@ -175,8 +175,25 @@ fragment shipment on TrackedShipmentResultType {
 - `delivered: true` → parcel routed to the delivered list; no Track & Trace call is made
 - `delivered: false` → parcel routed to the active list; a [Track & Trace](track_and_trace.md) call is made for live status
 - `barcode` → key for the `colli` lookup in the Track & Trace response
-- `title` → `sender` attribute on the HA sensor entity (with a fallback chain through `sourceDisplayName` for forward compatibility)
-- `receiverTitle` → `receiver_title` attribute on the HA sensor entity
+
+## Carrier-agnostic shape exposed by sensors
+
+Each shipment is transformed into a carrier-agnostic dict before being placed on a sensor attribute. Top-level keys come from the [shared shape](https://github.com/peternijssen/ha-parcel-aggregator); the original PostNL payload (the GraphQL fields above plus any [Track & Trace](track_and_trace.md) data) is preserved under `raw`.
+
+| Sensor field | Source on the PostNL shipment |
+|--------------|-------------------------------|
+| `carrier` | Constant `"PostNL"` |
+| `barcode` | `barcode` |
+| `sender` | `sourceDisplayName`, falling back to `title` (which is what actually carries the sender name) |
+| `status` | Track & Trace `statusPhase.message`, or `"Pakket is bezorgd"` for delivered shipments |
+| `delivered` | `delivered` |
+| `delivered_at` | `deliveredTimeStamp` (delivered only) |
+| `planned_from` | Track & Trace `routeInformation.plannedDeliveryTimeWindow.startDateTime` (or `eta.start` / GraphQL `deliveryWindowFrom`) — active only |
+| `planned_to` | Track & Trace `routeInformation.plannedDeliveryTimeWindow.endDateTime` (or `eta.end` / GraphQL `deliveryWindowTo`) — active only |
+| `pickup` | `deliveryAddressType == "ServicePoint"` |
+| `pickup_point` | PostNL's GraphQL response does not include a pickup-point name — `null` |
+| `url` | `detailsUrl` |
+| `raw` | The full transformed PostNL shipment dict, including `key`, `name`, `receiver_title`, `delivery_address_type`, `planned_date`, `expected_datetime` and the original `status_message` |
 
 ## Error handling
 

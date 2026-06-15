@@ -27,6 +27,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     try:
         await auth.check_and_refresh_token()
     except HomeAssistantError as exception:
+        _LOGGER.error("PostNL authentication failed during setup: %s", exception)
         raise ConfigEntryAuthFailed("Unable to authenticate with PostNL") from exception
 
     hass.data[DOMAIN][entry.entry_id] = {"auth": auth}
