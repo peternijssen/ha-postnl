@@ -8,6 +8,8 @@ A custom Home Assistant integration that tracks your incoming and outgoing PostN
 - Per-parcel sensor per active incoming shipment
 - Next delivery datetime sensor (device class `timestamp`)
 - PostNL point sensor — parcels destined for a PostNL pickup point
+- Letters sensor — count of announced letters from PostNL's MyMail service
+- Per-letter image entity — the scanned photo of each announced letter, served through Home Assistant
 - Automatic lifecycle management — sensors are created and removed as parcels move through delivery
 
 ## Requirements
@@ -46,6 +48,15 @@ A custom Home Assistant integration that tracks your incoming and outgoing PostN
 | `sensor.<account>_postnl_en_route_to_postnl_point` | Parcels destined for a PostNL pickup point |
 | `sensor.<account>_postnl_delivered_parcels` | Recently delivered incoming parcels (configurable window) |
 | `sensor.<account>_postnl_outgoing_parcels` | Number of active outgoing shipments |
+| `sensor.<account>_postnl_letters` | Letters announced by PostNL's MyMail service over the last 2 weeks; `unread` count and `letters` list on attributes |
+| `image.<account>_postnl_letter_<title>` | Scanned photo of a single announced letter, fetched with your token and served through Home Assistant |
+
+The image URL returned by PostNL's MyMail service requires the bearer token, so it cannot be loaded directly in a dashboard. The integration fetches the bytes itself and exposes each letter as an `image` entity instead. Show one with the built-in image card:
+
+```yaml
+type: image
+entity: image.<account>_postnl_letter_<title>
+```
 
 The delivered-parcels filter (last N days, or N most recent) can be changed at any time via **Settings → Devices & Services → PostNL → Configure**. Changes take effect on the next refresh — no reload required.
 

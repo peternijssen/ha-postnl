@@ -40,6 +40,64 @@ def _delivery_dt(parcel: dict) -> datetime | None:
     return dt
 
 
+_DUTCH_MONTHS = {
+    "januari": 1, "februari": 2, "maart": 3, "april": 4,
+    "mei": 5, "juni": 6, "juli": 7, "augustus": 8,
+    "september": 9, "oktober": 10, "november": 11, "december": 12,
+}
+
+
+def parse_letter_date(title: str, *, today: datetime | None = None) -> str | None:
+    """Convert a Dutch day-month title like '16 juni' into an ISO date string.
+
+    The MyMail endpoint returns dates without a year. We infer the year from
+    ``today``: if the parsed month/day is more than 31 days ahead of today, it
+    must belong to the previous year (PostNL only retains 2 weeks of mail).
+    """
+    if not title:
+        return None
+    parts = title.strip().lower().split()
+    if len(parts) != 2:
+        return None
+    try:
+        day = int(parts[0])
+    except ValueError:
+        return None
+    month = _DUTCH_MONTHS.get(parts[1])
+    if month is None:
+        return None
+    now = (today or datetime.now(timezone.utc)).date()
+    try:
+        candidate = now.replace(month=month, day=day)
+    except ValueError:
+        return None
+    if (candidate - now).days > 31:
+        try:
+            candidate = candidate.replace(year=candidate.year - 1)
+        except ValueError:
+            return None
+    return candidate.isoformat()
+
+
+def extract_letters(payload: dict, *, today: datetime | None = None) -> list[dict]:
+    """Extract letter entries from the server-driven-UI MyMail response."""
+    sections = ((payload or {}).get("screen") or {}).get("sections") or []
+    letters: list[dict] = []
+    for section in sections:
+        for item in section.get("items") or []:
+            if item.get("type") != "Letter":
+                continue
+            title = item.get("title")
+            letters.append({
+                "id": item.get("editId"),
+                "title": title,
+                "date": parse_letter_date(title, today=today),
+                "unread": bool(item.get("isUnread")),
+                "image_url": (item.get("image") or {}).get("url"),
+            })
+    return letters
+
+
 class PostNLCoordinator(DataUpdateCoordinator):
     data: dict[str, list[dict]]
     graphq_api: PostNLGraphql
@@ -55,6 +113,7 @@ class PostNLCoordinator(DataUpdateCoordinator):
         )
         self.config_entry = entry
         self.delivered_receiver: list[dict] = []
+        self.letters: list[dict] = []
         _LOGGER.debug("PostNLCoordinator initialized with update interval: %s", self.update_interval)
         
     async def _async_update_data(self) -> dict[str, list[dict]]:
@@ -86,9 +145,15 @@ class PostNLCoordinator(DataUpdateCoordinator):
             delivered_receiver = [p for p in data['receiver'] if p.get('delivered')]
             self.delivered_receiver = self._apply_delivered_filter(delivered_receiver)
 
+            try:
+                letters_payload = await self.hass.async_add_executor_job(self.jouw_api.letters)
+                self.letters = extract_letters(letters_payload)
+            except requests.exceptions.RequestException as exception:
+                _LOGGER.warning("PostNL letters fetch failed: %s", exception)
+
             _LOGGER.info(
-                "Updated PostNL data: %d receiver packages, %d sender packages, %d delivered shown.",
-                len(data['receiver']), len(data['sender']), len(self.delivered_receiver),
+                "Updated PostNL data: %d receiver packages, %d sender packages, %d delivered shown, %d letters.",
+                len(data['receiver']), len(data['sender']), len(self.delivered_receiver), len(self.letters),
             )
 
             return data

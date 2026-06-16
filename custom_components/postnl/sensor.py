@@ -46,6 +46,7 @@ async def async_setup_entry(
         f"{account_id}_en_route_to_service_point",
         f"{account_id}_outgoing_parcels",
         f"{account_id}_delivered_parcels",
+        f"{account_id}_letters",
     }
     for entity_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
         if (
@@ -67,6 +68,7 @@ async def async_setup_entry(
         PostNLEnRouteToServicePointSensor(coordinator=coordinator, userinfo=userinfo),
         PostNLOutgoingParcelsSensor(coordinator=coordinator, userinfo=userinfo),
         PostNLDeliveredParcelsSensor(coordinator=coordinator, userinfo=userinfo),
+        PostNLLettersSensor(coordinator=coordinator, userinfo=userinfo),
     ]
 
     for parcel in receiver_parcels:
@@ -360,4 +362,38 @@ class PostNLDeliveredParcelsSensor(CoordinatorEntity[PostNLCoordinator], SensorE
                 }
                 for p in self._parcels
             ]
+        }
+
+
+class PostNLLettersSensor(CoordinatorEntity[PostNLCoordinator], SensorEntity):
+    """Sensor reporting letters announced by PostNL's MyMail service."""
+
+    _attr_name = "PostNL Letters"
+    _attr_icon = "mdi:email"
+    _attr_native_unit_of_measurement = "letters"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+
+    def __init__(
+        self,
+        coordinator: PostNLCoordinator,
+        userinfo: dict[str, Any],
+    ) -> None:
+        super().__init__(coordinator)
+        account_id: str = userinfo.get("account_id", "")
+        self._attr_unique_id = f"{account_id}_letters"
+        self._attr_device_info = _build_device_info(userinfo)
+
+    @property
+    def _letters(self) -> list[dict]:
+        return self.coordinator.letters or []
+
+    @property
+    def native_value(self) -> int:
+        return len(self._letters)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {
+            "unread": sum(1 for letter in self._letters if letter.get("unread")),
+            "letters": self._letters,
         }
