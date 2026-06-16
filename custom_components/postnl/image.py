@@ -84,6 +84,7 @@ class PostNLLetterImage(CoordinatorEntity[PostNLCoordinator], ImageEntity):
 
     _attr_icon = "mdi:email-open"
     _attr_content_type = "image/jpeg"
+    _attr_attribution = "Data provided by PostNL"
 
     def __init__(
         self,

@@ -109,6 +109,8 @@ class PostNLIncomingParcelsSensor(CoordinatorEntity[PostNLCoordinator], SensorEn
     _attr_icon = "mdi:package-variant-closed"
     _attr_native_unit_of_measurement = "parcels"
     _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_attribution = "Data provided by PostNL"
+    _unrecorded_attributes = frozenset({"parcels"})
 
     def __init__(
         self,
@@ -155,6 +157,7 @@ class PostNLParcelSensor(CoordinatorEntity[PostNLCoordinator], SensorEntity):
     """Per-parcel sensor for a single active incoming PostNL shipment."""
 
     _attr_icon = "mdi:package-variant-closed"
+    _attr_attribution = "Data provided by PostNL"
 
     def __init__(
         self,
@@ -199,6 +202,7 @@ class PostNLNextDeliverySensor(CoordinatorEntity[PostNLCoordinator], SensorEntit
     _attr_name = "PostNL Next Delivery"
     _attr_icon = "mdi:clock-fast"
     _attr_device_class = SensorDeviceClass.TIMESTAMP
+    _attr_attribution = "Data provided by PostNL"
 
     def __init__(
         self,
@@ -249,6 +253,8 @@ class PostNLEnRouteToServicePointSensor(CoordinatorEntity[PostNLCoordinator], Se
     _attr_icon = "mdi:truck-delivery"
     _attr_native_unit_of_measurement = "parcels"
     _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_attribution = "Data provided by PostNL"
+    _unrecorded_attributes = frozenset({"parcels"})
 
     def __init__(
         self,
@@ -291,6 +297,8 @@ class PostNLOutgoingParcelsSensor(CoordinatorEntity[PostNLCoordinator], SensorEn
     _attr_icon = "mdi:package-variant-closed"
     _attr_native_unit_of_measurement = "parcels"
     _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_attribution = "Data provided by PostNL"
+    _unrecorded_attributes = frozenset({"shipments"})
 
     def __init__(
         self,
@@ -335,6 +343,8 @@ class PostNLDeliveredParcelsSensor(CoordinatorEntity[PostNLCoordinator], SensorE
     _attr_icon = "mdi:package-variant"
     _attr_native_unit_of_measurement = "parcels"
     _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_attribution = "Data provided by PostNL"
+    _unrecorded_attributes = frozenset({"parcels"})
 
     def __init__(
         self,
@@ -376,6 +386,8 @@ class PostNLLettersSensor(CoordinatorEntity[PostNLCoordinator], SensorEntity):
     _attr_icon = "mdi:email"
     _attr_native_unit_of_measurement = "letters"
     _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_attribution = "Data provided by PostNL"
+    _unrecorded_attributes = frozenset({"letters"})
 
     def __init__(
         self,
