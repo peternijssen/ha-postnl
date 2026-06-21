@@ -197,10 +197,10 @@ class PostNLCoordinator(DataUpdateCoordinator):
         super().__init__(
             hass,
             _LOGGER,
+            config_entry=entry,
             name="PostNL",
             update_interval=timedelta(seconds=POLL_INTERVAL),
         )
-        self.config_entry = entry
         self.delivered_receiver: list[dict] = []
         self.letters: list[dict] = []
         # barcode -> last seen ParcelStatus. ``None`` on the first refresh so
@@ -258,14 +258,11 @@ class PostNLCoordinator(DataUpdateCoordinator):
             )
 
             return data
-        except ConfigEntryAuthFailed as exception:
-            _LOGGER.error("PostNL authentication failed: %s", exception)
+        except ConfigEntryAuthFailed:
             raise
         except HomeAssistantError as exception:
-            _LOGGER.error("PostNL authentication error: %s", exception)
             raise UpdateFailed("Authentication failed") from exception
         except requests.exceptions.RequestException as exception:
-            _LOGGER.warning("PostNL endpoint unreachable: %s", exception)
             raise UpdateFailed("Unable to update PostNL data") from exception
 
     def _fire_change_events(self, parcels: list[dict]) -> None:
