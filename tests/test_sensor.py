@@ -1,7 +1,14 @@
-"""Tests for the PostNL sensor properties."""
+"""Tests for the PostNL sensor properties.
+
+Sensors read the carrier-agnostic parcel shape produced by
+:func:`normalize_parcel`. The ``_parcel`` helper here builds that shape
+directly so we can hit edge cases without going through the full
+transform_shipment / API flow.
+"""
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
+from custom_components.postnl.const import ParcelStatus
 from custom_components.postnl.sensor import (
     PostNLDeliveredParcelsSensor,
     PostNLEnRouteToServicePointSensor,
@@ -34,20 +41,28 @@ def _parcel(
     *,
     barcode: str = "3SABC",
     delivered: bool = False,
-    status: str = "IN_DELIVERY",
-    address_type: str = "ADDRESS",
+    status: ParcelStatus = ParcelStatus.IN_TRANSIT,
+    raw_status: str = "Pakket is onderweg",
+    sender: str = "Brand",
+    pickup: bool = False,
     planned_from: str | None = None,
-    planned_date: str | None = None,
+    planned_to: str | None = None,
+    delivered_at: str | None = None,
 ) -> dict:
     return {
+        "carrier": "PostNL",
         "barcode": barcode,
+        "sender": sender,
+        "status": status,
+        "raw_status": raw_status,
         "delivered": delivered,
-        "status_message": status,
-        "source_display_name": "Brand",
-        "delivery_address_type": address_type,
+        "delivered_at": delivered_at,
         "planned_from": planned_from,
-        "planned_date": planned_date,
-        "delivery_date": None,
+        "planned_to": planned_to,
+        "pickup": pickup,
+        "pickup_point": None,
+        "url": None,
+        "raw": {},
     }
 
 
@@ -68,9 +83,10 @@ def test_incoming_sensor_counts_only_active_receiver():
 
 
 def test_parcel_sensor_returns_status_for_known_barcode():
-    parcel = _parcel(barcode="X", status="ON_THE_WAY")
+    parcel = _parcel(barcode="X", status=ParcelStatus.OUT_FOR_DELIVERY)
     sensor = PostNLParcelSensor(_coordinator(receiver=[parcel]), _USERINFO, "X")
-    assert sensor.native_value == "ON_THE_WAY"
+    assert sensor.native_value == ParcelStatus.OUT_FOR_DELIVERY
+    assert sensor.native_value == "out_for_delivery"
     assert sensor.extra_state_attributes["barcode"] == "X"
 
 
@@ -95,12 +111,6 @@ def test_next_delivery_picks_earliest_planned_from():
     assert sensor.extra_state_attributes["barcode"] == "B"
 
 
-def test_next_delivery_falls_back_to_planned_date():
-    parcels = [_parcel(barcode="A", planned_date="2026-06-17T09:00:00Z")]
-    sensor = PostNLNextDeliverySensor(_coordinator(receiver=parcels), _USERINFO)
-    assert sensor.native_value == datetime(2026, 6, 17, 9, 0, tzinfo=timezone.utc)
-
-
 def test_next_delivery_none_when_no_parcels_have_dates():
     sensor = PostNLNextDeliverySensor(_coordinator(receiver=[_parcel()]), _USERINFO)
     assert sensor.native_value is None
@@ -120,8 +130,8 @@ def test_next_delivery_skips_invalid_date_strings():
 
 def test_en_route_counts_only_service_point_parcels():
     parcels = [
-        _parcel(barcode="A", address_type="ServicePoint"),
-        _parcel(barcode="B", address_type="ADDRESS"),
+        _parcel(barcode="A", pickup=True),
+        _parcel(barcode="B", pickup=False),
     ]
     sensor = PostNLEnRouteToServicePointSensor(_coordinator(receiver=parcels), _USERINFO)
     assert sensor.native_value == 1
@@ -131,7 +141,7 @@ def test_en_route_counts_only_service_point_parcels():
 
 
 def test_en_route_excludes_delivered():
-    parcels = [_parcel(barcode="A", address_type="ServicePoint", delivered=True)]
+    parcels = [_parcel(barcode="A", pickup=True, delivered=True)]
     sensor = PostNLEnRouteToServicePointSensor(_coordinator(receiver=parcels), _USERINFO)
     assert sensor.native_value == 0
 
@@ -141,16 +151,16 @@ def test_en_route_excludes_delivered():
 # ---------------------------------------------------------------------------
 
 
-def test_outgoing_sensor_lists_active_sender_shipments():
+def test_outgoing_sensor_lists_active_sender_parcels():
     shipments = [
-        {"barcode": "S1", "delivered": False, "status_message": "IN_TRANSIT"},
-        {"barcode": "S2", "delivered": True, "status_message": "DELIVERED"},
+        _parcel(barcode="S1", delivered=False),
+        _parcel(barcode="S2", delivered=True, status=ParcelStatus.DELIVERED),
     ]
     sensor = PostNLOutgoingParcelsSensor(_coordinator(sender=shipments), _USERINFO)
     assert sensor.native_value == 1
     attrs = sensor.extra_state_attributes
-    assert len(attrs["shipments"]) == 1
-    assert attrs["shipments"][0]["barcode"] == "S1"
+    assert len(attrs["parcels"]) == 1
+    assert attrs["parcels"][0]["barcode"] == "S1"
 
 
 # ---------------------------------------------------------------------------
@@ -159,7 +169,14 @@ def test_outgoing_sensor_lists_active_sender_shipments():
 
 
 def test_delivered_sensor_reads_from_coordinator_delivered_receiver():
-    delivered = [{"barcode": "D1", "source_display_name": "Sender", "status_message": "BEZORGD", "delivery_date": "2026-06-15"}]
+    delivered = [_parcel(
+        barcode="D1",
+        sender="Sender",
+        delivered=True,
+        status=ParcelStatus.DELIVERED,
+        raw_status="Pakket is bezorgd",
+        delivered_at="2026-06-15T10:00:00Z",
+    )]
     sensor = PostNLDeliveredParcelsSensor(
         _coordinator(delivered_receiver=delivered), _USERINFO
     )
@@ -167,6 +184,7 @@ def test_delivered_sensor_reads_from_coordinator_delivered_receiver():
     parcels = sensor.extra_state_attributes["parcels"]
     assert parcels[0]["barcode"] == "D1"
     assert parcels[0]["sender"] == "Sender"
+    assert parcels[0]["delivered_at"] == "2026-06-15T10:00:00Z"
 
 
 # ---------------------------------------------------------------------------

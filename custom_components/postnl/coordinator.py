@@ -89,9 +89,35 @@ def map_parcel_status(parcel: dict) -> ParcelStatus:
     return ParcelStatus.UNKNOWN
 
 
+def normalize_parcel(parcel: dict) -> dict:
+    """Wrap a transformed PostNL parcel in the canonical carrier-agnostic shape.
+
+    Top-level keys mirror DHL / DPD / parcel-aggregator. The original
+    transformed PostNL payload (GraphQL + Track & Trace fields like
+    ``status_message``, ``delivery_address_type``, ``planned_date``,
+    ``expected_datetime``) is preserved under ``raw`` for power users.
+    """
+    delivered = bool(parcel.get("delivered"))
+    return {
+        "carrier": "PostNL",
+        "barcode": parcel.get("barcode"),
+        "sender": parcel.get("source_display_name"),
+        "status": map_parcel_status(parcel),
+        "raw_status": parcel.get("status_message"),
+        "delivered": delivered,
+        "delivered_at": parcel.get("delivery_date") if delivered else None,
+        "planned_from": None if delivered else parcel.get("planned_from"),
+        "planned_to": None if delivered else parcel.get("planned_to"),
+        "pickup": parcel.get("delivery_address_type") == "ServicePoint",
+        "pickup_point": None,
+        "url": parcel.get("url"),
+        "raw": parcel,
+    }
+
+
 def _delivery_dt(parcel: dict) -> datetime | None:
-    """Parse the delivery datetime from a transformed parcel dict."""
-    date_str = parcel.get("delivery_date")
+    """Parse the delivery datetime from a normalised parcel dict."""
+    date_str = parcel.get("delivered_at")
     if not date_str:
         return None
     try:
@@ -249,7 +275,7 @@ class PostNLCoordinator(DataUpdateCoordinator):
             if shipment.get('delivered'):
                 _LOGGER.debug('%s already delivered, no need to call jouw.postnl.', shipment.get('key'))
 
-                return {
+                return normalize_parcel({
                     "key": shipment.get('key'),
                     "barcode": shipment.get('barcode'),
                     "name": shipment.get('title'),
@@ -269,7 +295,7 @@ class PostNLCoordinator(DataUpdateCoordinator):
                     "planned_from": None,
                     "planned_to": None,
                     "expected_datetime": None,
-                }
+                })
 
             _LOGGER.debug("Fetching Track and Trace details for shipment %s.", shipment['key'])
             track_and_trace_details = await self.hass.async_add_executor_job(self.jouw_api.track_and_trace,
@@ -308,7 +334,7 @@ class PostNLCoordinator(DataUpdateCoordinator):
                 planned_from = shipment.get('deliveryWindowFrom')
                 planned_to = shipment.get('deliveryWindowTo')
 
-            return {
+            return normalize_parcel({
                 "key": shipment.get('key'),
                 "barcode": shipment.get('barcode'),
                 "name": shipment.get('title'),
@@ -328,7 +354,7 @@ class PostNLCoordinator(DataUpdateCoordinator):
                 "planned_from": planned_from,
                 "planned_to": planned_to,
                 "expected_datetime": expected_datetime,
-            }
+            })
         except requests.exceptions.RequestException as exception:
             _LOGGER.error("Error fetching Track and Trace details for shipment %s: %s", shipment.get('key'), exception, exc_info=True)
             raise UpdateFailed("Unable to update PostNL data") from exception

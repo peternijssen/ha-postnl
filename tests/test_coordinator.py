@@ -4,11 +4,14 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from custom_components.postnl.const import ParcelStatus
 from custom_components.postnl.coordinator import (
     _DUTCH_MONTHS,
     PostNLCoordinator,
     _delivery_dt,
     extract_letters,
+    map_parcel_status,
+    normalize_parcel,
     parse_letter_date,
 )
 
@@ -19,14 +22,14 @@ from custom_components.postnl.coordinator import (
 
 
 def test_delivery_dt_parses_iso_with_tz():
-    parcel = {"delivery_date": "2026-06-12T10:00:00+02:00"}
+    parcel = {"delivered_at": "2026-06-12T10:00:00+02:00"}
     dt = _delivery_dt(parcel)
     assert dt is not None
     assert dt.year == 2026 and dt.hour == 10
 
 
 def test_delivery_dt_assigns_utc_when_naive():
-    parcel = {"delivery_date": "2026-06-12T10:00:00"}
+    parcel = {"delivered_at": "2026-06-12T10:00:00"}
     dt = _delivery_dt(parcel)
     assert dt is not None
     assert dt.tzinfo is not None
@@ -34,19 +37,118 @@ def test_delivery_dt_assigns_utc_when_naive():
 
 
 def test_delivery_dt_handles_z_suffix():
-    parcel = {"delivery_date": "2026-06-12T10:00:00Z"}
+    parcel = {"delivered_at": "2026-06-12T10:00:00Z"}
     dt = _delivery_dt(parcel)
     assert dt == datetime(2026, 6, 12, 10, 0, tzinfo=timezone.utc)
 
 
 def test_delivery_dt_returns_none_for_missing():
     assert _delivery_dt({}) is None
-    assert _delivery_dt({"delivery_date": None}) is None
-    assert _delivery_dt({"delivery_date": ""}) is None
+    assert _delivery_dt({"delivered_at": None}) is None
+    assert _delivery_dt({"delivered_at": ""}) is None
 
 
 def test_delivery_dt_returns_none_for_garbage():
-    assert _delivery_dt({"delivery_date": "not a date"}) is None
+    assert _delivery_dt({"delivered_at": "not a date"}) is None
+
+
+# ---------------------------------------------------------------------------
+# map_parcel_status
+# ---------------------------------------------------------------------------
+
+
+def test_map_parcel_status_delivered_flag_short_circuits():
+    assert map_parcel_status({"delivered": True, "status_message": "anything"}) == ParcelStatus.DELIVERED
+
+
+def test_map_parcel_status_unknown_when_message_missing():
+    assert map_parcel_status({}) == ParcelStatus.UNKNOWN
+    assert map_parcel_status({"status_message": ""}) == ParcelStatus.UNKNOWN
+    assert map_parcel_status({"status_message": None}) == ParcelStatus.UNKNOWN
+
+
+def test_map_parcel_status_out_for_delivery_beats_in_transit():
+    # "onderweg naar het bezorgadres" contains "onderweg" but must be more specific
+    assert map_parcel_status({"status_message": "Pakket is onderweg naar het bezorgadres"}) == ParcelStatus.OUT_FOR_DELIVERY
+
+
+def test_map_parcel_status_wordt_vandaag_bezorgd_is_out_for_delivery():
+    # "wordt vandaag bezorgd" contains "bezorgd" but must NOT match DELIVERED
+    assert map_parcel_status({"status_message": "Pakket wordt vandaag bezorgd"}) == ParcelStatus.OUT_FOR_DELIVERY
+
+
+def test_map_parcel_status_in_transit_for_onderweg():
+    assert map_parcel_status({"status_message": "Pakket is onderweg"}) == ParcelStatus.IN_TRANSIT
+
+
+def test_map_parcel_status_at_pickup_point_for_postnl_punt():
+    assert map_parcel_status({"status_message": "Pakket ligt klaar bij PostNL punt"}) == ParcelStatus.AT_PICKUP_POINT
+
+
+def test_map_parcel_status_registered_for_aangemeld():
+    assert map_parcel_status({"status_message": "Pakket is aangemeld"}) == ParcelStatus.REGISTERED
+
+
+def test_map_parcel_status_unknown_for_unmapped_string():
+    assert map_parcel_status({"status_message": "Verstuurd via warpdrive"}) == ParcelStatus.UNKNOWN
+
+
+# ---------------------------------------------------------------------------
+# normalize_parcel
+# ---------------------------------------------------------------------------
+
+
+def test_normalize_parcel_canonical_top_level_keys():
+    parcel = normalize_parcel({
+        "barcode": "3SXYZ",
+        "source_display_name": "Bol.com",
+        "url": "https://example.com",
+        "delivered": False,
+        "status_message": "Pakket is onderweg",
+        "delivery_date": None,
+        "delivery_address_type": "Recipient",
+        "planned_from": "2026-06-20T09:00:00Z",
+        "planned_to": "2026-06-20T17:00:00Z",
+    })
+    assert parcel["carrier"] == "PostNL"
+    assert parcel["barcode"] == "3SXYZ"
+    assert parcel["sender"] == "Bol.com"
+    assert parcel["status"] == ParcelStatus.IN_TRANSIT
+    assert parcel["raw_status"] == "Pakket is onderweg"
+    assert parcel["delivered"] is False
+    assert parcel["delivered_at"] is None
+    assert parcel["planned_from"] == "2026-06-20T09:00:00Z"
+    assert parcel["planned_to"] == "2026-06-20T17:00:00Z"
+    assert parcel["pickup"] is False
+    assert parcel["pickup_point"] is None
+    assert parcel["url"] == "https://example.com"
+    assert "status_message" not in parcel  # original lives only under raw
+    assert parcel["raw"]["status_message"] == "Pakket is onderweg"
+
+
+def test_normalize_parcel_pickup_detected_for_service_point():
+    parcel = normalize_parcel({
+        "barcode": "X",
+        "delivered": False,
+        "delivery_address_type": "ServicePoint",
+        "status_message": "Pakket is onderweg",
+    })
+    assert parcel["pickup"] is True
+
+
+def test_normalize_parcel_delivered_window_cleared():
+    parcel = normalize_parcel({
+        "barcode": "X",
+        "delivered": True,
+        "delivery_date": "2026-06-20T10:00:00Z",
+        "status_message": "Pakket is bezorgd",
+        "planned_from": "2026-06-20T09:00:00Z",
+        "planned_to": "2026-06-20T11:00:00Z",
+    })
+    assert parcel["status"] == ParcelStatus.DELIVERED
+    assert parcel["delivered_at"] == "2026-06-20T10:00:00Z"
+    assert parcel["planned_from"] is None
+    assert parcel["planned_to"] is None
 
 
 # ---------------------------------------------------------------------------
@@ -180,7 +282,8 @@ async def test_transform_shipment_short_circuits_for_delivered(hass):
     parcel = await coordinator.transform_shipment(shipment)
     assert parcel["barcode"] == "3SABC"
     assert parcel["delivered"] is True
-    assert parcel["status_message"] == "Pakket is bezorgd"
+    assert parcel["status"] == ParcelStatus.DELIVERED
+    assert parcel["raw_status"] == "Pakket is bezorgd"
     # No track_and_trace call should be made for delivered shipments
     coordinator.jouw_api.track_and_trace.assert_not_called()
 
@@ -210,10 +313,10 @@ async def test_transform_shipment_fetches_planned_window_from_route_information(
         "delivered": False,
     }
     parcel = await coordinator.transform_shipment(shipment)
-    assert parcel["status_message"] == "OP_WEG_VAN_AFZENDER"
+    assert parcel["raw_status"] == "OP_WEG_VAN_AFZENDER"
     assert parcel["planned_from"] == "2026-06-17T14:00:00Z"
     assert parcel["planned_to"] == "2026-06-17T16:00:00Z"
-    assert parcel["expected_datetime"] == "2026-06-17T15:15:00Z"
+    assert parcel["raw"]["expected_datetime"] == "2026-06-17T15:15:00Z"
 
 
 async def test_transform_shipment_falls_back_to_eta_window(hass):
@@ -236,7 +339,7 @@ async def test_transform_shipment_falls_back_to_eta_window(hass):
         "delivered": False,
     }
     parcel = await coordinator.transform_shipment(shipment)
-    assert parcel["status_message"] == "BEZIG_MET_BEZORGEN"
+    assert parcel["raw_status"] == "BEZIG_MET_BEZORGEN"
     assert parcel["planned_from"] == "2026-06-17T11:00:00Z"
     assert parcel["planned_to"] == "2026-06-17T13:00:00Z"
 
@@ -276,5 +379,6 @@ async def test_transform_shipment_handles_missing_colli_entry(hass):
         "deliveryWindowTo": "2026-06-20T17:00:00Z",
     }
     parcel = await coordinator.transform_shipment(shipment)
-    assert parcel["status_message"] == "Unknown"
+    assert parcel["raw_status"] == "Unknown"
+    assert parcel["status"] == ParcelStatus.UNKNOWN
     assert parcel["planned_from"] == "2026-06-20T09:00:00Z"
