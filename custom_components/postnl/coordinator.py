@@ -19,11 +19,74 @@ from .const import (
     DEFAULT_DELIVERED_FILTER_TYPE,
     DOMAIN,
     POLL_INTERVAL,
+    ParcelStatus,
 )
 from .graphql import PostNLGraphql
 from .jouw_api import PostNLJouwAPI
 
 _LOGGER = logging.getLogger(__name__)
+
+
+# PostNL's status comes from two signals:
+#   - shipment.delivered (bool, GraphQL) — terminal indicator
+#   - colli.statusPhase.message (Track & Trace) — Dutch human-readable string
+#
+# statusPhase.message is not under an API contract: PostNL changes the wording
+# at will. So we substring-match against the meaningful subphrase rather than
+# look up against a fixed enum. Order matters — first match wins, so the more
+# specific patterns must come before the broader ones (e.g. "wordt vandaag
+# bezorgd" before "bezorgd").
+_STATUS_PATTERNS: tuple[tuple[str, ParcelStatus], ...] = (
+    ("ligt klaar bij postnl punt", ParcelStatus.AT_PICKUP_POINT),
+    ("afgeleverd op postnl punt", ParcelStatus.AT_PICKUP_POINT),
+    ("klaar bij postnl punt", ParcelStatus.AT_PICKUP_POINT),
+    ("teruggestuurd", ParcelStatus.RETURNING),
+    ("retour", ParcelStatus.RETURNING),
+    ("wordt vandaag bezorgd", ParcelStatus.OUT_FOR_DELIVERY),
+    ("onderweg naar het bezorgadres", ParcelStatus.OUT_FOR_DELIVERY),
+    ("onderweg naar de bezorger", ParcelStatus.OUT_FOR_DELIVERY),
+    ("aangemeld", ParcelStatus.REGISTERED),
+    ("verwacht", ParcelStatus.REGISTERED),
+    ("ontvangen", ParcelStatus.IN_TRANSIT),
+    ("gesorteerd", ParcelStatus.IN_TRANSIT),
+    ("onderweg", ParcelStatus.IN_TRANSIT),
+    ("bezorgd", ParcelStatus.DELIVERED),
+)
+
+_LOGGED_UNKNOWN_STATUSES: set[str] = set()
+
+
+def map_parcel_status(parcel: dict) -> ParcelStatus:
+    """Map a PostNL parcel dict to a canonical :class:`ParcelStatus`.
+
+    ``parcel`` is the intermediate dict built by :meth:`transform_shipment`
+    with at least ``delivered`` (bool) and ``status_message`` (str) populated.
+    The ``delivered`` flag from GraphQL is authoritative and short-circuits to
+    :attr:`ParcelStatus.DELIVERED`. Anything that does not match any pattern
+    is reported as :attr:`ParcelStatus.UNKNOWN` and surfaced once at info
+    level so users can open an issue to extend the map.
+    """
+    if parcel.get("delivered"):
+        return ParcelStatus.DELIVERED
+
+    raw = (parcel.get("status_message") or "").strip().lower()
+    if not raw:
+        return ParcelStatus.UNKNOWN
+
+    for pattern, status in _STATUS_PATTERNS:
+        if pattern in raw:
+            return status
+
+    if raw not in _LOGGED_UNKNOWN_STATUSES:
+        _LOGGED_UNKNOWN_STATUSES.add(raw)
+        _LOGGER.info(
+            "Unmapped PostNL status %r will be reported as ParcelStatus.UNKNOWN. "
+            "Please open an issue at "
+            "https://github.com/peternijssen/ha-postnl/issues so the map can "
+            "be extended.",
+            parcel.get("status_message"),
+        )
+    return ParcelStatus.UNKNOWN
 
 
 def _delivery_dt(parcel: dict) -> datetime | None:
