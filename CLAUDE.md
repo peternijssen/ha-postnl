@@ -122,9 +122,9 @@ re-propose these as improvements:
   matters; don't reorder.
 - **MyMail endpoint requires app-identification headers**: not just
   the bearer token. `PostNLJouwAPI.mymail_headers` carries
-  `api-version`, `app-platform`, `device-token`, etc. These were
-  lifted from a decompiled PostNL Android APK. Headers occasionally
-  need bumping if PostNL ships a new app version.
+  `api-version`, `app-platform`, `device-token`, etc. These mirror
+  the headers the PostNL mobile app sends. Values occasionally need
+  bumping if PostNL ships a new app version.
 - **MyMail uses a "server-driven UI" payload**: not a clean JSON list
   of letters. `extract_letters` walks `screen.sections[].items[]`
   looking for `type == "Letter"`. Dates come as `"16 juni"` (Dutch

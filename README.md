@@ -233,7 +233,11 @@ Tracking parcels from other Dutch carriers:
 This is an independent, community-built project with no affiliation,
 endorsement, or connection to PostNL or any of its subsidiaries. The
 PostNL API used here is undocumented (reverse-engineered from the
-mobile app and jouw.postnl.nl) and may change without notice.
+mobile app and jouw.postnl.nl) and may change without notice. The
+maintainers have not asked PostNL for permission to use this API;
+installing this integration may breach PostNL's Terms of Service.
+You take any risk that follows — account suspension, service
+disruption, etc. No warranty (see [LICENSE](LICENSE.md)).
 
 ## Contributing
 
