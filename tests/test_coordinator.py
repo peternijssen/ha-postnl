@@ -367,6 +367,112 @@ async def test_transform_shipment_falls_back_to_delivery_window_strings(hass):
     assert parcel["planned_to"] == "2026-06-18T17:00:00Z"
 
 
+# ---------------------------------------------------------------------------
+# _fire_change_events
+# ---------------------------------------------------------------------------
+
+
+def _capture(hass, event_type: str) -> list:
+    events: list = []
+    hass.bus.async_listen(event_type, events.append)
+    return events
+
+
+def _norm(barcode: str, status_message: str, *, delivered: bool = False) -> dict:
+    return normalize_parcel({
+        "barcode": barcode,
+        "delivered": delivered,
+        "status_message": status_message,
+    })
+
+
+async def test_fire_change_events_silent_on_first_refresh(hass):
+    coordinator = _make_coordinator(hass)
+    reg = _capture(hass, "postnl_parcel_registered")
+    chg = _capture(hass, "postnl_parcel_status_changed")
+
+    # _known_state is None on a fresh coordinator → suppress.
+    coordinator._fire_change_events([_norm("A", "Pakket is onderweg")])
+    await hass.async_block_till_done()
+
+    assert reg == []
+    assert chg == []
+
+
+async def test_fire_change_events_emits_registered_for_new_barcode(hass):
+    coordinator = _make_coordinator(hass)
+    coordinator._known_state = {"A": ParcelStatus.IN_TRANSIT}
+    captured = _capture(hass, "postnl_parcel_registered")
+
+    coordinator._fire_change_events([
+        _norm("A", "Pakket is onderweg"),
+        _norm("NEW", "Pakket is aangemeld"),
+    ])
+    await hass.async_block_till_done()
+
+    assert len(captured) == 1
+    payload = captured[0].data
+    assert payload["barcode"] == "NEW"
+    assert payload["status"] == ParcelStatus.REGISTERED
+    assert payload["carrier"] == "PostNL"
+
+
+async def test_fire_change_events_emits_status_changed(hass):
+    coordinator = _make_coordinator(hass)
+    coordinator._known_state = {"A": ParcelStatus.IN_TRANSIT}
+    captured = _capture(hass, "postnl_parcel_status_changed")
+
+    coordinator._fire_change_events([_norm("A", "Pakket wordt vandaag bezorgd")])
+    await hass.async_block_till_done()
+
+    assert len(captured) == 1
+    payload = captured[0].data
+    assert payload["barcode"] == "A"
+    assert payload["old_status"] == ParcelStatus.IN_TRANSIT
+    assert payload["new_status"] == ParcelStatus.OUT_FOR_DELIVERY
+    assert payload["status"] == ParcelStatus.OUT_FOR_DELIVERY
+
+
+async def test_fire_change_events_no_event_when_status_unchanged(hass):
+    coordinator = _make_coordinator(hass)
+    coordinator._known_state = {"A": ParcelStatus.IN_TRANSIT}
+    reg = _capture(hass, "postnl_parcel_registered")
+    chg = _capture(hass, "postnl_parcel_status_changed")
+
+    coordinator._fire_change_events([_norm("A", "Pakket is onderweg")])
+    await hass.async_block_till_done()
+
+    assert reg == []
+    assert chg == []
+
+
+async def test_fire_change_events_intra_in_transit_does_not_fire(hass):
+    """Different Dutch strings mapping to the same canonical status fire nothing.
+
+    "ontvangen" and "gesorteerd" both map to IN_TRANSIT — the raw_status
+    changes but the normalised status does not, so no event is emitted.
+    """
+    coordinator = _make_coordinator(hass)
+    coordinator._known_state = {"A": ParcelStatus.IN_TRANSIT}
+    captured = _capture(hass, "postnl_parcel_status_changed")
+
+    coordinator._fire_change_events([_norm("A", "Pakket is gesorteerd in het sorteercentrum")])
+    await hass.async_block_till_done()
+
+    assert captured == []
+
+
+async def test_fire_change_events_skips_parcels_without_barcode(hass):
+    coordinator = _make_coordinator(hass)
+    coordinator._known_state = {}
+    captured = _capture(hass, "postnl_parcel_registered")
+
+    coordinator._fire_change_events([_norm("", "Pakket is onderweg")])
+    await hass.async_block_till_done()
+
+    assert captured == []
+
+
 async def test_transform_shipment_handles_missing_colli_entry(hass):
     coordinator = _make_coordinator(hass)
     coordinator.jouw_api.track_and_trace = MagicMock(return_value={"colli": {}})

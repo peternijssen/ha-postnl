@@ -203,6 +203,10 @@ class PostNLCoordinator(DataUpdateCoordinator):
         self.config_entry = entry
         self.delivered_receiver: list[dict] = []
         self.letters: list[dict] = []
+        # barcode -> last seen ParcelStatus. ``None`` on the first refresh so
+        # we can suppress events for parcels that already existed when the
+        # integration started (we do not know their previous state).
+        self._known_state: dict[str, ParcelStatus] | None = None
         _LOGGER.debug("PostNLCoordinator initialized with update interval: %s", self.update_interval)
         
     async def _async_update_data(self) -> dict[str, list[dict]]:
@@ -231,6 +235,14 @@ class PostNLCoordinator(DataUpdateCoordinator):
                                 shipments.get('trackedShipments', {}).get('senderShipments', [])]
             data['sender'] = await asyncio.gather(*sender_shipments)
 
+            active_receiver = [p for p in data['receiver'] if not p.get('delivered')]
+            self._fire_change_events(active_receiver)
+            self._known_state = {
+                p["barcode"]: p["status"]
+                for p in active_receiver
+                if p.get("barcode")
+            }
+
             delivered_receiver = [p for p in data['receiver'] if p.get('delivered')]
             self.delivered_receiver = self._apply_delivered_filter(delivered_receiver)
 
@@ -255,6 +267,39 @@ class PostNLCoordinator(DataUpdateCoordinator):
         except requests.exceptions.RequestException as exception:
             _LOGGER.warning("PostNL endpoint unreachable: %s", exception)
             raise UpdateFailed("Unable to update PostNL data") from exception
+
+    def _fire_change_events(self, parcels: list[dict]) -> None:
+        """Fire events for newly-registered parcels and status transitions.
+
+        Silent on the very first refresh — we cannot reliably know which
+        parcels are "new" to the user vs. "already there before HA started".
+        From the second refresh onward, every parcel that was not present
+        before yields one ``postnl_parcel_registered`` event, and every
+        parcel whose normalised status changed yields one
+        ``postnl_parcel_status_changed`` event.
+        """
+        if self._known_state is None:
+            return
+
+        for parcel in parcels:
+            barcode = parcel.get("barcode")
+            if not barcode:
+                continue
+            new_status = parcel["status"]
+            if barcode not in self._known_state:
+                self.hass.bus.async_fire(
+                    f"{DOMAIN}_parcel_registered",
+                    {**parcel},
+                )
+            elif self._known_state[barcode] != new_status:
+                self.hass.bus.async_fire(
+                    f"{DOMAIN}_parcel_status_changed",
+                    {
+                        **parcel,
+                        "old_status": self._known_state[barcode],
+                        "new_status": new_status,
+                    },
+                )
 
     def _apply_delivered_filter(self, parcels: list[dict]) -> list[dict]:
         """Trim the delivered receiver list according to the configured options."""
