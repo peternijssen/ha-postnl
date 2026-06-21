@@ -61,5 +61,40 @@
         "parcels": "Number of parcels"
       }
     }
+  },
+  "entity": {
+    "sensor": {
+      "incoming_parcels": {
+        "name": "Incoming parcels",
+        "unit_of_measurement": "parcels"
+      },
+      "parcel": {
+        "name": "Parcel {barcode}"
+      },
+      "outgoing_parcels": {
+        "name": "Outgoing parcels",
+        "unit_of_measurement": "parcels"
+      },
+      "delivered_parcels": {
+        "name": "Delivered parcels",
+        "unit_of_measurement": "parcels"
+      },
+      "next_delivery": {
+        "name": "Next delivery"
+      },
+      "en_route_to_service_point": {
+        "name": "En route to PostNL Point",
+        "unit_of_measurement": "parcels"
+      },
+      "letters": {
+        "name": "Letters",
+        "unit_of_measurement": "letters"
+      }
+    },
+    "image": {
+      "letter_image": {
+        "name": "Letter {title}"
+      }
+    }
   }
 }

@@ -61,5 +61,40 @@
         "parcels": "Aantal pakketten"
       }
     }
+  },
+  "entity": {
+    "sensor": {
+      "incoming_parcels": {
+        "name": "Inkomende pakketten",
+        "unit_of_measurement": "pakketten"
+      },
+      "parcel": {
+        "name": "Pakket {barcode}"
+      },
+      "outgoing_parcels": {
+        "name": "Uitgaande pakketten",
+        "unit_of_measurement": "pakketten"
+      },
+      "delivered_parcels": {
+        "name": "Bezorgde pakketten",
+        "unit_of_measurement": "pakketten"
+      },
+      "next_delivery": {
+        "name": "Volgende bezorging"
+      },
+      "en_route_to_service_point": {
+        "name": "Onderweg naar PostNL Punt",
+        "unit_of_measurement": "pakketten"
+      },
+      "letters": {
+        "name": "Brieven",
+        "unit_of_measurement": "brieven"
+      }
+    },
+    "image": {
+      "letter_image": {
+        "name": "Brief {title}"
+      }
+    }
   }
 }

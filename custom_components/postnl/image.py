@@ -82,7 +82,8 @@ async def async_setup_entry(
 class PostNLLetterImage(CoordinatorEntity[PostNLCoordinator], ImageEntity):
     """Image entity exposing the scanned photo of a single MyMail letter."""
 
-    _attr_icon = "mdi:email-open"
+    _attr_has_entity_name = True
+    _attr_translation_key = "letter_image"
     _attr_content_type = "image/jpeg"
     _attr_attribution = "Data provided by PostNL"
 
@@ -105,7 +106,7 @@ class PostNLLetterImage(CoordinatorEntity[PostNLCoordinator], ImageEntity):
         self._image_url: str | None = (self._letter() or {}).get("image_url")
         self._cached_url: str | None = None
         self._cached_bytes: bytes | None = None
-        self._apply_name()
+        self._apply_title()
 
     def _letter(self) -> dict | None:
         for letter in self.coordinator.letters or []:
@@ -113,10 +114,10 @@ class PostNLLetterImage(CoordinatorEntity[PostNLCoordinator], ImageEntity):
                 return letter
         return None
 
-    def _apply_name(self) -> None:
+    def _apply_title(self) -> None:
         letter = self._letter()
         title = (letter or {}).get("title") or self._letter_id
-        self._attr_name = f"PostNL Letter {title}"
+        self._attr_translation_placeholders = {"title": title}
 
     @property
     def available(self) -> bool:
@@ -131,7 +132,7 @@ class PostNLLetterImage(CoordinatorEntity[PostNLCoordinator], ImageEntity):
             self._cached_url = None
             self._cached_bytes = None
             self._attr_image_last_updated = dt_util.utcnow()
-        self._apply_name()
+        self._apply_title()
         super()._handle_coordinator_update()
 
     async def async_image(self) -> bytes | None:
