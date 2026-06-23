@@ -233,6 +233,10 @@ class PostNLCoordinator(DataUpdateCoordinator):
         # we can suppress events for parcels that already existed when the
         # integration started (we do not know their previous state).
         self._known_state: dict[str, ParcelStatus] | None = None
+        # Letter ids seen on the previous successful letters fetch. ``None``
+        # on the first refresh for the same reason — we do not want to fire
+        # ``postnl_letter_announced`` for every letter that already existed.
+        self._known_letter_ids: set[str] | None = None
         _LOGGER.debug("PostNLCoordinator initialized with update interval: %s", self.update_interval)
         
     async def _async_update_data(self) -> dict[str, list[dict]]:
@@ -282,6 +286,10 @@ class PostNLCoordinator(DataUpdateCoordinator):
             try:
                 letters_payload = await self.hass.async_add_executor_job(self.jouw_api.letters)
                 self.letters = extract_letters(letters_payload)
+                self._fire_letter_events(self.letters)
+                self._known_letter_ids = {
+                    letter["id"] for letter in self.letters if letter.get("id")
+                }
             except requests.exceptions.RequestException as exception:
                 _LOGGER.warning("PostNL letters fetch failed: %s", exception)
 
@@ -330,6 +338,26 @@ class PostNLCoordinator(DataUpdateCoordinator):
                         "new_status": new_status,
                     },
                 )
+
+    def _fire_letter_events(self, letters: list[dict]) -> None:
+        """Fire ``postnl_letter_announced`` for newly-seen letter ids.
+
+        Silent on the very first refresh — we cannot tell which letters
+        are "new" vs "already announced before HA started". From the
+        second refresh onward, every letter whose id was not present in
+        the previous successful fetch yields one event with the full
+        letter payload plus ``carrier: "PostNL"``.
+        """
+        if self._known_letter_ids is None:
+            return
+        for letter in letters:
+            letter_id = letter.get("id")
+            if not letter_id or letter_id in self._known_letter_ids:
+                continue
+            self.hass.bus.async_fire(
+                f"{DOMAIN}_letter_announced",
+                {**letter, "carrier": "PostNL"},
+            )
 
     def _apply_delivered_filter(self, parcels: list[dict]) -> list[dict]:
         """Trim the delivered receiver list according to the configured options."""

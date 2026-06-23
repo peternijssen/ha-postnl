@@ -474,6 +474,70 @@ async def test_fire_change_events_skips_parcels_without_barcode(hass):
     assert captured == []
 
 
+# ---------------------------------------------------------------------------
+# _fire_letter_events
+# ---------------------------------------------------------------------------
+
+
+def _letter(letter_id: str, title: str = "16 juni", *, unread: bool = True, image_url: str | None = "https://example.com/a.jpg", date: str | None = "2026-06-16") -> dict:
+    return {
+        "id": letter_id,
+        "title": title,
+        "date": date,
+        "unread": unread,
+        "image_url": image_url,
+    }
+
+
+async def test_fire_letter_events_silent_on_first_refresh(hass):
+    coordinator = _make_coordinator(hass)
+    captured = _capture(hass, "postnl_letter_announced")
+
+    # _known_letter_ids is None on a fresh coordinator → suppress.
+    coordinator._fire_letter_events([_letter("ABC1"), _letter("ABC2")])
+    await hass.async_block_till_done()
+
+    assert captured == []
+
+
+async def test_fire_letter_events_emits_announced_for_new_id(hass):
+    coordinator = _make_coordinator(hass)
+    coordinator._known_letter_ids = {"ABC1"}
+    captured = _capture(hass, "postnl_letter_announced")
+
+    coordinator._fire_letter_events([_letter("ABC1"), _letter("NEW", title="17 juni")])
+    await hass.async_block_till_done()
+
+    assert len(captured) == 1
+    payload = captured[0].data
+    assert payload["id"] == "NEW"
+    assert payload["title"] == "17 juni"
+    assert payload["image_url"] == "https://example.com/a.jpg"
+    assert payload["carrier"] == "PostNL"
+
+
+async def test_fire_letter_events_no_event_when_letter_unchanged(hass):
+    coordinator = _make_coordinator(hass)
+    coordinator._known_letter_ids = {"ABC1"}
+    captured = _capture(hass, "postnl_letter_announced")
+
+    coordinator._fire_letter_events([_letter("ABC1")])
+    await hass.async_block_till_done()
+
+    assert captured == []
+
+
+async def test_fire_letter_events_skips_letters_without_id(hass):
+    coordinator = _make_coordinator(hass)
+    coordinator._known_letter_ids = set()
+    captured = _capture(hass, "postnl_letter_announced")
+
+    coordinator._fire_letter_events([_letter("")])
+    await hass.async_block_till_done()
+
+    assert captured == []
+
+
 async def test_transform_shipment_handles_missing_colli_entry(hass):
     coordinator = _make_coordinator(hass)
     coordinator.jouw_api.track_and_trace = MagicMock(return_value={"colli": {}})

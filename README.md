@@ -152,10 +152,12 @@ polling per-parcel sensors.
 |---|---|---|
 | `postnl_parcel_registered` | A new barcode appears in the active list | The full normalised parcel dict (`carrier`, `barcode`, `sender`, `status`, `raw_status`, `delivered`, `delivered_at`, `planned_from`, `planned_to`, `pickup`, `pickup_point`, `url`, `raw`) |
 | `postnl_parcel_status_changed` | A known barcode's canonical `status` value changes | Same payload plus `old_status` and `new_status` |
+| `postnl_letter_announced` | A new letter id appears in the MyMail feed | The letter dict (`id`, `title`, `date`, `unread`, `image_url`) plus `carrier: "PostNL"` |
 
 The coordinator suppresses events on the very first refresh after
-start-up so you don't get a stampede of "registered" events for
-parcels that were already in your account before HA started.
+start-up so you don't get a stampede of "registered" or "announced"
+events for parcels and letters that were already in your account
+before HA started.
 
 See [`examples/automations/`](examples/automations/) for ready-to-paste
 event-driven automations, or the

@@ -178,9 +178,11 @@ changes:
 |---|---|---|
 | `postnl_parcel_registered` | A new barcode appears in the active list | Full normalised parcel dict |
 | `postnl_parcel_status_changed` | A known barcode's canonical `status` changes | Normalised parcel dict plus `old_status` and `new_status` |
+| `postnl_letter_announced` | A new letter id appears in the MyMail feed | Letter dict (`id`, `title`, `date`, `unread`, `image_url`) plus `carrier: "PostNL"` |
 
 Events are suppressed on the very first refresh after start-up to
-avoid a flood of "registered" events for parcels that already existed.
+avoid a flood of "registered" or "announced" events for parcels and
+letters that already existed.
 
 Because events fire on the canonical `status`, intra-`in_transit`
 churn (e.g. `statusPhase.message` flipping from "Pakket is onderweg"

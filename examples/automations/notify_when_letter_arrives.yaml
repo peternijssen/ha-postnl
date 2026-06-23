@@ -1,31 +1,33 @@
-# Notify when a new letter is announced via PostNL's MyMail service.
-# This watches sensor.postnl_letters going up, not an event — there is
-# no per-letter event yet. The trigger fires on the count incrementing,
-# which means the latest letter is at index 0 of the `letters`
-# attribute. Use the matching PostNLLetterImage entity to view the
-# scan: image.postnl_letter_<editId>.
+# Notify when PostNL's MyMail service announces a new letter.
+#
+# Listens for postnl_letter_announced, which fires once per newly-seen
+# letter id from the second coordinator refresh onward (the first
+# refresh is silent so we do not re-fire for letters that already
+# existed before HA started).
+#
+# The notification carries the scanned letter image as an attachment.
+# Both iOS and Android companion apps render the image inline.
 
 alias: "PostNL: new letter announced"
-description: Notify when MyMail announces a new letter for today.
+description: Notify when MyMail announces a new letter, with the scan attached.
 mode: queued
 max: 5
 
 triggers:
-  - trigger: state
-    entity_id: sensor.postnl_letters
-
-conditions:
-  # Only fire when the count actually goes up.
-  - condition: template
-    value_template: >-
-      {{ (trigger.to_state.state | int(0)) > (trigger.from_state.state | int(0)) }}
+  - trigger: event
+    event_type: postnl_letter_announced
 
 actions:
-  - variables:
-      latest: "{{ (state_attr('sensor.postnl_letters', 'letters') or [{}])[0] }}"
   - action: notify.mobile_app
     data:
       title: "Brief aangekondigd"
       message: >-
         Vandaag komt er een brief binnen
-        {%- if latest.date %} (gedateerd {{ latest.date }}){% endif %}.
+        {%- if trigger.event.data.date %} (gedateerd {{ trigger.event.data.date }}){% endif %}.
+      data:
+        # iOS
+        attachment:
+          url: "{{ trigger.event.data.image_url }}"
+          content-type: jpeg
+        # Android
+        image: "{{ trigger.event.data.image_url }}"

@@ -76,10 +76,12 @@ re-propose these as improvements:
   `planned_to`, `pickup`, `pickup_point`, `url`, `raw`. Sensors read
   these keys; the original transformed PostNL payload lives under
   `raw`.
-- **Events**: the coordinator fires `postnl_parcel_registered` and
-  `postnl_parcel_status_changed` on the HA event bus. Events are
-  suppressed on the very first refresh so we do not flood users with
-  "registered" events for parcels that already existed.
+- **Events**: the coordinator fires `postnl_parcel_registered`,
+  `postnl_parcel_status_changed` and `postnl_letter_announced` on the
+  HA event bus. All three are suppressed on the very first refresh so
+  we do not flood users with events for parcels or letters that
+  already existed. `_known_letter_ids` mirrors `_known_state` and is
+  reset only after a successful letters fetch.
 - **`has_entity_name = True`** on every entity, with `translation_key`
   routing names through `strings.json` and the language files. Drop
   `_attr_name` is the rule — translations are the source of truth.
