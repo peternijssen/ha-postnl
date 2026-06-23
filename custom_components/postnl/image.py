@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from typing import Any
 
 from homeassistant.components.image import ImageEntity
@@ -17,6 +18,19 @@ from .coordinator import PostNLCoordinator
 from .sensor import _build_device_info
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _letter_date_as_datetime(letter: dict | None) -> datetime | None:
+    """Return the letter's parsed ISO date as a tz-aware datetime, or None."""
+    if not letter:
+        return None
+    date_iso = letter.get("date")
+    if not isinstance(date_iso, str) or not date_iso:
+        return None
+    try:
+        return datetime.fromisoformat(date_iso).replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
 
 
 async def async_setup_entry(
@@ -102,7 +116,12 @@ class PostNLLetterImage(CoordinatorEntity[PostNLCoordinator], ImageEntity):
         account_id: str = userinfo.get("account_id", "")
         self._attr_unique_id = f"{account_id}_letter_image_{letter_id}"
         self._attr_device_info = _build_device_info(userinfo)
-        self._attr_image_last_updated = dt_util.utcnow()
+        # Use the parsed letter date as the entity's "last updated" timestamp so
+        # the state reflects when the letter was announced, not when HA booted.
+        # Falls back to utcnow when the date couldn't be parsed.
+        self._attr_image_last_updated = (
+            _letter_date_as_datetime(self._letter()) or dt_util.utcnow()
+        )
         self._image_url: str | None = (self._letter() or {}).get("image_url")
         self._cached_url: str | None = None
         self._cached_bytes: bytes | None = None

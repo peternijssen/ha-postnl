@@ -69,6 +69,26 @@ def test_letter_image_title_falls_back_to_id_when_missing():
     assert img.translation_placeholders == {"title": "L1"}
 
 
+def test_letter_image_state_uses_parsed_letter_date():
+    # Regression: previously the entity state was always dt_util.utcnow(),
+    # so every HA restart showed the boot time instead of the letter date.
+    letter = _letter("L1")
+    letter["date"] = "2026-06-16"
+    img, _ = _make_image(_coordinator([letter]), letter_id="L1")
+    assert img.image_last_updated.year == 2026
+    assert img.image_last_updated.month == 6
+    assert img.image_last_updated.day == 16
+
+
+def test_letter_image_state_falls_back_to_now_when_date_unparseable():
+    # When parse_letter_date couldn't extract anything from the title we
+    # still want a sensible "last updated" instead of crashing or None.
+    letter = _letter("L1", title="???")
+    letter["date"] = None
+    img, _ = _make_image(_coordinator([letter]), letter_id="L1")
+    assert img.image_last_updated is not None
+
+
 def test_letter_image_attributes_mirror_letter_dict():
     letter = _letter("L1", title="16 juni")
     letter["date"] = "2026-06-16"
