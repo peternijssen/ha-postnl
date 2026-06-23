@@ -1,12 +1,20 @@
-# Notify when PostNL's MyMail service announces a new letter.
+# Notify when PostNL's MyMail service announces a new letter, with the
+# scanned image attached.
 #
-# Listens for postnl_letter_announced, which fires once per newly-seen
-# letter id from the second coordinator refresh onward (the first
-# refresh is silent so we do not re-fire for letters that already
-# existed before HA started).
+# Triggers on the per-letter image entity *appearing* (old_state is
+# none): Home Assistant's image platform spawns a new
+# image.postnl_..._letter_<title> entity for every new letter, and the
+# state goes from missing to a timestamp the moment it lands.
 #
-# The notification carries the scanned letter image as an attachment.
-# Both iOS and Android companion apps render the image inline.
+# Why not the postnl_letter_announced event? The event fires before
+# the image entity exists, and PostNL's raw image_url requires a
+# bearer token that the mobile companion app does not have. Triggering
+# on the entity means we already know its id, and we can use Home
+# Assistant's image proxy (/api/image_proxy/<entity_id>) which the
+# companion app authenticates against natively.
+#
+# For a plain-text "you got a letter" notification without the image,
+# trigger on the event instead — see the events reference in the README.
 
 alias: "PostNL: new letter announced"
 description: Notify when MyMail announces a new letter, with the scan attached.
@@ -15,19 +23,25 @@ max: 5
 
 triggers:
   - trigger: event
-    event_type: postnl_letter_announced
+    event_type: state_changed
+
+conditions:
+  - condition: template
+    value_template: >-
+      {{ trigger.event.data.entity_id.startswith('image.postnl')
+         and '_letter_' in trigger.event.data.entity_id
+         and trigger.event.data.old_state is none
+         and trigger.event.data.new_state is not none }}
 
 actions:
   - action: notify.mobile_app
     data:
       title: "Brief aangekondigd"
-      message: >-
-        Vandaag komt er een brief binnen
-        {%- if trigger.event.data.date %} (gedateerd {{ trigger.event.data.date }}){% endif %}.
+      message: "PostNL heeft een nieuwe brief aangekondigd."
       data:
         # iOS
         attachment:
-          url: "{{ trigger.event.data.image_url }}"
+          url: "/api/image_proxy/{{ trigger.event.data.entity_id }}"
           content-type: jpeg
         # Android
-        image: "{{ trigger.event.data.image_url }}"
+        image: "/api/image_proxy/{{ trigger.event.data.entity_id }}"
