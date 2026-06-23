@@ -129,6 +129,32 @@ def _delivery_dt(parcel: dict) -> datetime | None:
     return dt
 
 
+def sort_parcels_by_ts(
+    parcels: list[dict], key_field: str, *, descending: bool = False
+) -> list[dict]:
+    """Return normalised parcels sorted by the ISO timestamp at ``key_field``.
+
+    Parcels whose value is missing or unparseable always sort to the end,
+    regardless of ``descending`` — so freshly registered parcels without
+    an ETA stay visible at the bottom instead of jumping to the top.
+    """
+    with_ts: list[tuple[datetime, dict]] = []
+    without_ts: list[dict] = []
+    for parcel in parcels:
+        value = parcel.get(key_field)
+        if not isinstance(value, str) or not value:
+            without_ts.append(parcel)
+            continue
+        try:
+            dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            without_ts.append(parcel)
+            continue
+        with_ts.append((dt, parcel))
+    with_ts.sort(key=lambda item: item[0], reverse=descending)
+    return [p for _, p in with_ts] + without_ts
+
+
 _DUTCH_MONTHS = {
     "januari": 1, "februari": 2, "maart": 3, "april": 4,
     "mei": 5, "juni": 6, "juli": 7, "augustus": 8,
@@ -235,6 +261,9 @@ class PostNLCoordinator(DataUpdateCoordinator):
                                 shipments.get('trackedShipments', {}).get('senderShipments', [])]
             data['sender'] = await asyncio.gather(*sender_shipments)
 
+            data['receiver'] = sort_parcels_by_ts(data['receiver'], 'planned_from')
+            data['sender'] = sort_parcels_by_ts(data['sender'], 'planned_from')
+
             active_receiver = [p for p in data['receiver'] if not p.get('delivered')]
             self._fire_change_events(active_receiver)
             self._known_state = {
@@ -244,7 +273,11 @@ class PostNLCoordinator(DataUpdateCoordinator):
             }
 
             delivered_receiver = [p for p in data['receiver'] if p.get('delivered')]
-            self.delivered_receiver = self._apply_delivered_filter(delivered_receiver)
+            self.delivered_receiver = sort_parcels_by_ts(
+                self._apply_delivered_filter(delivered_receiver),
+                'delivered_at',
+                descending=True,
+            )
 
             try:
                 letters_payload = await self.hass.async_add_executor_job(self.jouw_api.letters)
