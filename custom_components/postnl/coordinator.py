@@ -47,6 +47,32 @@ _DUTCH_MONTHS = {
 }
 
 
+def sort_parcels_by_ts(
+    parcels: list[dict], key_field: str, *, descending: bool = False
+) -> list[dict]:
+    """Return parcels sorted by the ISO timestamp at ``key_field``.
+
+    Parcels whose value is missing or unparseable always sort to the end,
+    regardless of ``descending`` — so freshly registered parcels without
+    an ETA stay visible at the bottom instead of jumping to the top.
+    """
+    with_ts: list[tuple[datetime, dict]] = []
+    without_ts: list[dict] = []
+    for parcel in parcels:
+        value = parcel.get(key_field)
+        if not isinstance(value, str) or not value:
+            without_ts.append(parcel)
+            continue
+        try:
+            dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            without_ts.append(parcel)
+            continue
+        with_ts.append((dt, parcel))
+    with_ts.sort(key=lambda item: item[0], reverse=descending)
+    return [p for _, p in with_ts] + without_ts
+
+
 def parse_letter_date(title: str, *, today: datetime | None = None) -> str | None:
     """Convert a Dutch day-month title like '16 juni' into an ISO date string.
 
@@ -142,8 +168,15 @@ class PostNLCoordinator(DataUpdateCoordinator):
                                 shipments.get('trackedShipments', {}).get('senderShipments', [])]
             data['sender'] = await asyncio.gather(*sender_shipments)
 
+            data['receiver'] = sort_parcels_by_ts(data['receiver'], 'planned_from')
+            data['sender'] = sort_parcels_by_ts(data['sender'], 'planned_from')
+
             delivered_receiver = [p for p in data['receiver'] if p.get('delivered')]
-            self.delivered_receiver = self._apply_delivered_filter(delivered_receiver)
+            self.delivered_receiver = sort_parcels_by_ts(
+                self._apply_delivered_filter(delivered_receiver),
+                'delivery_date',
+                descending=True,
+            )
 
             try:
                 letters_payload = await self.hass.async_add_executor_job(self.jouw_api.letters)
