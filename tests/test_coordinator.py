@@ -609,5 +609,17 @@ def test_sort_handles_z_suffix_timestamps():
     assert ordered == ["b", "a"]
 
 
+def test_sort_mixes_naive_and_aware_timestamps_without_crashing():
+    # Regression: PostNL sometimes returns mixed-tz timestamps in the same
+    # bucket. The sort treated naive values as UTC, otherwise Python raises
+    # "can't compare offset-naive and offset-aware datetimes".
+    parcels = [
+        _ts_parcel("aware", planned_from="2026-06-15T10:00:00+00:00"),
+        _ts_parcel("naive", planned_from="2026-06-13T10:00:00"),
+    ]
+    ordered = [p["barcode"] for p in sort_parcels_by_ts(parcels, "planned_from")]
+    assert ordered == ["naive", "aware"]
+
+
 def test_sort_empty_input_returns_empty_list():
     assert sort_parcels_by_ts([], "planned_from") == []

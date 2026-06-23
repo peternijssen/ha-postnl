@@ -150,6 +150,10 @@ def sort_parcels_by_ts(
         except ValueError:
             without_ts.append(parcel)
             continue
+        # PostNL mixes offset-aware and naive timestamps in the same payload;
+        # treat naive values as UTC so the sort doesn't crash on a mixed list.
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
         with_ts.append((dt, parcel))
     with_ts.sort(key=lambda item: item[0], reverse=descending)
     return [p for _, p in with_ts] + without_ts
