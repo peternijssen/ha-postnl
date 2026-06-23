@@ -109,9 +109,15 @@ and any cross-carrier dashboard can read parcels from all three
 integrations the same way.
 
 The image URL returned by PostNL's MyMail service requires the bearer
-token, so it cannot be loaded directly in a dashboard. The integration
+token, so it cannot be loaded directly — not in a dashboard card and
+not as a mobile-notification attachment, since the Home Assistant
+companion app has no access to that token either. The integration
 fetches the bytes itself and exposes each letter as an `image` entity
-instead — show one with the built-in image card.
+instead. Show one with the built-in image card on a dashboard, or
+reference its `entity_id` in a notification via Home Assistant's
+image proxy (`/api/image_proxy/<entity_id>`) — see
+[`examples/automations/notify_when_letter_arrives.yaml`](examples/automations/notify_when_letter_arrives.yaml)
+for a ready-to-paste setup.
 
 For full attribute reference and example automations see
 [docs/sensors.md](docs/sensors.md) — or the
