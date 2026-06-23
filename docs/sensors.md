@@ -14,9 +14,6 @@ Full reference for all sensors provided by the PostNL integration.
 > `delivered`, `delivered_at`, `planned_from`, `planned_to`, `pickup`,
 > `pickup_point`, `url`, plus the original transformed PostNL payload
 > (GraphQL shipment fields + Track & Trace `colli` data) under `raw`.
-> The mapping from PostNL-side fields onto these keys is documented in
-> [docs/api/graphql.md](api/graphql.md) and
-> [docs/api/track_and_trace.md](api/track_and_trace.md).
 
 ## Incoming parcels
 

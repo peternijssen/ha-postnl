@@ -20,6 +20,7 @@ card:
       'out_for_delivery': 'bezorging vandaag',
       'at_pickup_point': 'klaar bij PostNL Punt',
       'delivered': 'bezorgd',
+      'problem': 'probleem',
       'returning': 'retour naar afzender',
       'unknown': 'status onbekend'
     } %}

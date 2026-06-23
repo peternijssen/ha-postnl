@@ -3,6 +3,25 @@
 A custom Home Assistant integration that tracks your PostNL shipments
 and announced MyMail letters.
 
+## Contents
+
+- [Features](#features)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Options](#options)
+- [Removal](#removal)
+- [Sensors](#sensors)
+- [Parcel status reference](#parcel-status-reference)
+- [Events](#events)
+- [Examples](#examples)
+- [Debugging](#debugging)
+- [Troubleshooting](#troubleshooting)
+- [Related integrations](#related-integrations)
+- [Disclaimer](#disclaimer)
+- [Contributing](#contributing)
+- [License](#license)
+
 ## Features
 
 - Incoming and outgoing active-parcel count sensors
@@ -174,28 +193,18 @@ in one go.
 
 ## Examples
 
-The [`examples/`](examples/) folder ships ready-to-paste snippets for
-both automations and dashboards. Highlights:
-
-- [`examples/automations/notify_when_parcel_registered.yaml`](examples/automations/notify_when_parcel_registered.yaml) — push when PostNL announces a new parcel.
-- [`examples/automations/notify_when_out_for_delivery.yaml`](examples/automations/notify_when_out_for_delivery.yaml) — alert once per parcel when it's on the truck today.
-- [`examples/automations/notify_when_at_pickup_point.yaml`](examples/automations/notify_when_at_pickup_point.yaml) — alert when a parcel arrives at a PostNL Point.
-- [`examples/automations/announce_delivery_window.yaml`](examples/automations/announce_delivery_window.yaml) — TTS announcement an hour before the next planned delivery.
-- [`examples/automations/notify_when_letter_arrives.yaml`](examples/automations/notify_when_letter_arrives.yaml) — push when MyMail announces a new letter for today.
-- [`examples/dashboards/active_parcels_grid.yaml`](examples/dashboards/active_parcels_grid.yaml) — markdown card listing every active parcel with sender, canonical status and tracking link.
-- [`examples/dashboards/summary_glance.yaml`](examples/dashboards/summary_glance.yaml) — compact 4-column glance row with the day-to-day counters (parcels, PostNL Point, recent, letters).
-- [`examples/dashboards/next_delivery_countdown.yaml`](examples/dashboards/next_delivery_countdown.yaml) — entities card showing the next expected delivery and details.
-- [`examples/dashboards/letters_gallery.yaml`](examples/dashboards/letters_gallery.yaml) — dynamic picture gallery of recently announced MyMail letters (requires the `custom:auto-entities` HACS card).
+Ready-to-paste automations and dashboard cards live in [`examples/`](examples/).
 
 ### Community Lovelace cards
 
-If you want a richer UI than the snippets above, two third-party cards
-work nicely with this integration's sensors:
+If you want a richer UI than the snippets above, third-party cards work
+nicely with this integration's sensors:
 
+- [jonisnet/hki-parcels-card](https://github.com/jonisnet/hki-parcels-card) — multi-carrier (PostNL, DHL, DPD) Home Kit-style card with Onderweg/Bezorgd/Verzonden/Post tabs. The "Post" tab matches MyMail letter scans to this integration's `image.*` entities, so the scan stays login-free.
 - [klaptafel/ha-package-tracker-card](https://github.com/klaptafel/ha-package-tracker-card) — purpose-built card for parcel integrations; renders each parcel with sender, status and tracking link.
-- [jimz011/hki-elements](https://github.com/jimz011/hki-elements) — collection of Home Kit-style elements that pair well with the per-parcel sensors for a cleaner dashboard.
+- [jimz011/hki-elements](https://github.com/jimz011/hki-elements) — the original PostNL-only Home Kit-style card that hki-parcels-card was forked from. Still useful if you prefer the original single-carrier layout.
 
-Both are maintained by their respective authors — please raise UI issues
+All maintained by their respective authors — please raise UI issues
 in those repos.
 
 ## Debugging
@@ -214,9 +223,6 @@ logging for the integration:
 2. Restart Home Assistant.
 3. Wait for the next poll cycle (or reload the integration from **Settings → Devices & Services → PostNL → ⋮ → Reload**).
 4. Open **Settings → System → Logs**, filter for `postnl`, and copy the relevant log lines (including the `Shipments fetched: ...` summary and any `Track and Trace response: ...` payload) into your bug report or message to the maintainer.
-
-The API endpoints used by the integration are documented under
-[`docs/api/`](docs/api/) for anyone interested in how the bytes flow.
 
 ## Troubleshooting
 

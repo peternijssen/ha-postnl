@@ -1,0 +1,57 @@
+name: Bug report
+description: Report a bug in the PostNL integration
+title: "[Bug]: "
+labels: ["bug"]
+assignees:
+  - peternijssen
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. The more detail you provide, the faster we can reproduce and fix the issue.
+
+  - type: input
+    id: integration-version
+    attributes:
+      label: PostNL integration version
+      description: Found under Settings → Devices & Services → PostNL → ⋮ → System info, or in `custom_components/postnl/manifest.json`.
+      placeholder: "e.g. 1.2.3"
+    validations:
+      required: true
+
+  - type: input
+    id: ha-version
+    attributes:
+      label: Home Assistant version
+      description: Found under Settings → About.
+      placeholder: "e.g. 2026.6.2"
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug — what you expected and what you actually got.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: How can we trigger this on our side?
+      placeholder: |
+        1. ...
+        2. ...
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: |
+        Enable debug logging for `custom_components.postnl` (Settings → Devices & Services → PostNL → ⋮ → Enable debug logging) and paste the relevant lines. **Redact tokens, e-mail addresses and barcodes** before posting.
+      render: shell
