@@ -27,8 +27,8 @@ class PostNLCoordinator(DataUpdateCoordinator):
             _LOGGER,
             name="PostNL",
             update_interval=timedelta(seconds=90),
+            config_entry=entry,
         )
-        self.config_entry = entry
         _LOGGER.debug("PostNLCoordinator initialized with update interval: %s", self.update_interval)
         
     async def _async_update_data(self) -> dict[str, list[Package]]:
