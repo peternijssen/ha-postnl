@@ -64,15 +64,14 @@ re-propose these as improvements:
   and letter lists are kept out of the recorder long-term tables
 - `_attr_attribution = "Data provided by PostNL"` per entity
 - Letters sensor and per-letter `ImageEntity` for MyMail
-- **No `entry.add_update_listener`** — the delivered-parcels filter is
-  read live in the coordinator's `_apply_delivered_filter`, so the
-  OptionsFlow can just `async_create_entry` and the next poll picks up
-  the change. Combining a listener with a reload-on-update flow is
-  logged as a deprecation today and becomes an error in HA 2026.12+ —
-  see the
-  [config_entry_listener deprecation](https://developers.home-assistant.io/blog/2026/05/07/config-entry-listener-together-with-reloading-methods/).
+- **No `entry.add_update_listener`** — the OptionsFlow calls
+  `self.hass.config_entries.async_schedule_reload(entry.entry_id)` on
+  submit so a changed refresh interval takes effect immediately.
   Reauth still reloads via `async_update_reload_and_abort` (that is
-  correct and unrelated).
+  correct and unrelated). Combining an update listener with a
+  reload-on-update flow is logged as a deprecation today and becomes
+  an error in HA 2026.12+ — see the
+  [config_entry_listener deprecation](https://developers.home-assistant.io/blog/2026/05/07/config-entry-listener-together-with-reloading-methods/).
 
 ### Adopted in 4.0.0 (do not refactor away)
 
@@ -86,15 +85,20 @@ re-propose these as improvements:
 - **Carrier-agnostic parcel shape**: every parcel exposed by the
   coordinator carries `carrier`, `barcode`, `sender`, `status`,
   `raw_status`, `delivered`, `delivered_at`, `planned_from`,
-  `planned_to`, `pickup`, `pickup_point`, `url`, `raw`. Sensors read
-  these keys; the original transformed PostNL payload lives under
-  `raw`.
+  `planned_to`, `pickup`, `pickup_point`, `url`, `raw`. (Extended in
+  4.1.0 with `receiver`, `weight`, `dimensions` — see below.) Sensors
+  read these keys; the original transformed PostNL payload lives
+  under `raw`.
 - **Events**: the coordinator fires `postnl_parcel_registered`,
-  `postnl_parcel_status_changed` and `postnl_letter_announced` on the
-  HA event bus. All three are suppressed on the very first refresh so
-  we do not flood users with events for parcels or letters that
-  already existed. `_known_letter_ids` mirrors `_known_state` and is
-  reset only after a successful letters fetch.
+  `postnl_parcel_status_changed`, `postnl_parcel_delivery_time_changed`
+  (added in 4.1.0) and `postnl_letter_announced` on the HA event bus.
+  All are suppressed on the very first refresh so we do not flood
+  users with events for parcels or letters that already existed.
+  `_known_letter_ids` mirrors `_known_state` and is reset only after a
+  successful letters fetch. `delivery_time_changed` only fires when at
+  least one of `planned_from` / `planned_to` ends up with a non-null
+  value different from the previous one — value-to-null transitions
+  are intentionally silent.
 - **`has_entity_name = True`** on every entity, with `translation_key`
   routing names through `strings.json` and the language files. Drop
   `_attr_name` is the rule — translations are the source of truth.
@@ -106,6 +110,27 @@ re-propose these as improvements:
 - **Device name pattern**: `"PostNL (<email>)"`. Sensors auto-prefix
   with this, yielding friendly names like
   `PostNL (account@example.com) Incoming parcels`.
+
+### Adopted in 4.1.0 (do not refactor away)
+
+- **Carrier-agnostic `receiver`, `weight`, `dimensions`** on every
+  parcel. `receiver` comes from `colli.recipient.names.personName`
+  (active path) or the GraphQL `receiverTitle` field (delivered
+  short-circuit). `weight` and `dimensions` are sourced from
+  `colli.details.dimensions` (native g + mm); `_convert_native_dimensions`
+  turns them into the suite-wide canonical contract (kg + cm with the
+  long edge as `length` rather than PostNL's `depth`, plus a
+  pre-formatted `"L x W x H cm"` `text` string). The native dict
+  stays on the intermediate parcel so it surfaces under `raw` for
+  power users. Delivered parcels skip Track & Trace and therefore
+  have no weight/dimensions (`None` for both).
+- **Configurable refresh interval** via the options flow
+  (`CONF_REFRESH_INTERVAL`; 15, 30, 60, 120 or 240 minutes; default
+  30). The form is split into `delivered` and `polling` sections via
+  `data_entry_flow.section`. The legacy hard-coded `POLL_INTERVAL`
+  constant is gone — the coordinator reads `_refresh_interval(entry)`
+  at startup, and the OptionsFlow triggers a reload on submit so a
+  changed interval takes effect immediately.
 
 ## Planned for the next major bump
 

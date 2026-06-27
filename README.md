@@ -69,14 +69,21 @@ and announced MyMail letters.
 
 ## Options
 
-Click **Configure** on the integration card to change the delivered-parcels filter:
+Click **Configure** on the integration card. The form is split into two
+sections:
+
+### Delivered parcels
 
 | Option | Description |
 |---|---|
 | Filter by | `Days` keeps delivered parcels visible for the last N days. `Number of parcels` keeps only the N most recent regardless of age. |
 | Amount | The N used by the filter above. |
 
-Changes take effect on the next refresh — no reload required.
+### Polling
+
+| Option | Description |
+|---|---|
+| Refresh every | How often the integration checks PostNL. Choices: **15 / 30 / 60 / 120 / 240 minutes** — default 30. A slower interval is gentler on PostNL's API. Changes take effect immediately, no HA restart needed. |
 
 ## Removal
 
@@ -111,6 +118,7 @@ Every parcel exposed on a sensor attribute uses a carrier-agnostic shape:
 | `carrier` | string | `"PostNL"` |
 | `barcode` | string | Parcel tracking number |
 | `sender` | string \| null | Sender name (e.g. webshop) |
+| `receiver` | string \| null | Recipient name. Comes from `colli.recipient.names.personName` for active parcels and from the GraphQL `receiverTitle` field for delivered parcels (since the delivered short-circuit skips Track & Trace). |
 | `status` | `ParcelStatus` | Canonical status — see the [status reference](#parcel-status-reference) |
 | `raw_status` | string \| null | Original PostNL `statusPhase.message` (a Dutch human-readable string) |
 | `delivered` | bool | Whether the parcel has been delivered |
@@ -120,7 +128,9 @@ Every parcel exposed on a sensor attribute uses a carrier-agnostic shape:
 | `pickup` | bool | Destined for a PostNL Point rather than a home address |
 | `pickup_point` | string \| null | PostNL Point name when `pickup` is true (always `null` for now — PostNL has not yet exposed the field) |
 | `url` | string \| null | Deep link to the parcel's tracking page on jouw.postnl.nl |
-| `raw` | dict | The full transformed PostNL payload (GraphQL shipment fields + Track & Trace `colli` data combined) |
+| `weight` | float \| null | Parcel weight in kilograms (converted from PostNL's native grams). `null` for delivered parcels and for parcels whose Track & Trace response does not carry the field. |
+| `dimensions` | dict \| null | Parcel dimensions in centimeters: `{length, width, height, text}` — `text` is a pre-formatted `"L x W x H cm"` string. Same coverage as `weight`. PostNL's native depth (mm) maps to canonical `length`. |
+| `raw` | dict | The full transformed PostNL payload (GraphQL shipment fields + Track & Trace `colli` data combined). The native `dimensions` dict (`{height, width, depth, weight}` in mm + g) lives here. |
 
 This is the same shape DHL and DPD use, so the
 [parcel aggregator](https://github.com/peternijssen/ha-parcel-aggregator)
@@ -177,6 +187,7 @@ polling per-parcel sensors.
 |---|---|---|
 | `postnl_parcel_registered` | A new barcode appears in the active list | The full normalised parcel dict (`carrier`, `barcode`, `sender`, `status`, `raw_status`, `delivered`, `delivered_at`, `planned_from`, `planned_to`, `pickup`, `pickup_point`, `url`, `raw`) |
 | `postnl_parcel_status_changed` | A known barcode's canonical `status` value changes | Same payload plus `old_status` and `new_status` |
+| `postnl_parcel_delivery_time_changed` | A known barcode's `planned_from` or `planned_to` ends up with a non-null value that differs from the previous one. Value-to-null transitions are intentionally silent. | Same payload plus `old_planned_from`, `new_planned_from`, `old_planned_to`, `new_planned_to` |
 | `postnl_letter_announced` | A new letter id appears in the MyMail feed | The letter dict (`id`, `title`, `date`, `unread`, `image_url`) plus `carrier: "PostNL"` |
 
 The coordinator suppresses events on the very first refresh after

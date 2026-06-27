@@ -1,0 +1,26 @@
+# Notify when PostNL updates the expected delivery time for an active
+# parcel — either a brand-new ETA appears, or an existing one shifts.
+# value -> null transitions (carrier dropped the ETA) are intentionally
+# silent at the integration level, so they will not trigger this
+# automation.
+
+alias: "PostNL: delivery time updated"
+description: Notify when PostNL updates the expected delivery time for an active parcel.
+mode: queued
+max: 10
+
+triggers:
+  - trigger: event
+    event_type: postnl_parcel_delivery_time_changed
+
+actions:
+  - action: notify.mobile_app
+    data:
+      title: "Nieuwe PostNL-levertijd"
+      message: >-
+        {{ trigger.event.data.sender }} – {{ trigger.event.data.barcode }}:
+        verwacht
+        {{ as_timestamp(trigger.event.data.new_planned_from) | timestamp_custom('%a %d %b %H:%M', true)
+           if trigger.event.data.new_planned_from else 'onbekend' }}
+      data:
+        clickAction: "{{ trigger.event.data.url }}"

@@ -9,11 +9,17 @@ Full reference for all sensors provided by the PostNL integration.
 
 > **Parcel shape:** every parcel exposed on a sensor attribute carries
 > the carrier-agnostic top-level keys `carrier`, `barcode`, `sender`,
-> `status` (the canonical [`ParcelStatus`](#parcel-status-reference)
+> `receiver`, `status` (the canonical [`ParcelStatus`](#parcel-status-reference)
 > value), `raw_status` (PostNL's Dutch `statusPhase.message` string),
 > `delivered`, `delivered_at`, `planned_from`, `planned_to`, `pickup`,
-> `pickup_point`, `url`, plus the original transformed PostNL payload
-> (GraphQL shipment fields + Track & Trace `colli` data) under `raw`.
+> `pickup_point`, `url`, `weight` (kg) and `dimensions`
+> (`{length, width, height, text}` in cm with `text` a pre-formatted
+> `"L x W x H cm"` string). `weight` and `dimensions` are only present
+> for active parcels whose Track & Trace response carries
+> `colli.details.dimensions` — delivered parcels skip Track & Trace,
+> so both are `null` there. The original transformed PostNL payload
+> (GraphQL shipment fields + Track & Trace `colli` data, including the
+> native `dimensions` dict in mm + g) lives under `raw`.
 
 ## Incoming parcels
 
@@ -175,6 +181,7 @@ changes:
 |---|---|---|
 | `postnl_parcel_registered` | A new barcode appears in the active list | Full normalised parcel dict |
 | `postnl_parcel_status_changed` | A known barcode's canonical `status` changes | Normalised parcel dict plus `old_status` and `new_status` |
+| `postnl_parcel_delivery_time_changed` | A known barcode's `planned_from` or `planned_to` ends up with a non-null value different from the previous one. Value-to-null transitions are silent. | Normalised parcel dict plus `old_planned_from`, `new_planned_from`, `old_planned_to`, `new_planned_to` |
 | `postnl_letter_announced` | A new letter id appears in the MyMail feed | Letter dict (`id`, `title`, `date`, `unread`, `image_url`) plus `carrier: "PostNL"` |
 
 Events are suppressed on the very first refresh after start-up to
@@ -193,24 +200,30 @@ ready-to-paste event-driven automations.
 
 ## Options
 
-After setup, click **Configure** on the integration card to change the
-delivered-parcels filter:
+After setup, click **Configure** on the integration card. The form is
+split into two sections:
+
+### Delivered parcels
 
 | Option | Description |
 |--------|-------------|
 | **Filter by** | `Days` — show parcels delivered in the last N days. `Number of parcels` — show the N most recent deliveries. |
 | **Amount** | The number of days or parcels (1–365). Default: **7 days**. |
 
-Changes take effect on the next data refresh without requiring a
-reload.
+### Polling
+
+| Option | Description |
+|--------|-------------|
+| **Refresh every** | How often the integration checks PostNL. Choices: **15 / 30 / 60 / 120 / 240 minutes** — default 30. A slower interval is gentler on PostNL's API. Changes take effect immediately, no HA restart needed. |
 
 ---
 
 ## Poll interval
 
-Data is refreshed every **5 minutes**. You can trigger a manual
-refresh from the integration's device page using the **Reload**
-option.
+Default cadence is **30 minutes**, configurable via the **Polling**
+section of the integration's Options (see above). You can also trigger
+a manual refresh from the integration's device page using the
+**Reload** option.
 
 ---
 
