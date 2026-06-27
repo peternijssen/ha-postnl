@@ -46,7 +46,11 @@ re-propose these as improvements:
 - `PARALLEL_UPDATES = 0` in `sensor.py`
 - Coordinator takes `config_entry=entry` so `self.config_entry` is
   available on the base class
-- Per-parcel sensors self-remove via `async_remove(force_remove=True)`
+- Per-parcel sensors are removed by the summary sensor
+  (`PostNLIncomingParcelsSensor`) via `entity_registry.async_remove(entity_id)`
+  when a barcode drops out of the coordinator data. The earlier
+  self-remove pattern raced with coordinator-listener cleanup and left
+  ghost entities behind — do not revert.
 - Reauth flow uses `async_update_reload_and_abort` (one helper call
   instead of update + reload + abort)
 - `aiohttp.ClientError` is intentionally not caught in the coordinator
@@ -60,6 +64,15 @@ re-propose these as improvements:
   and letter lists are kept out of the recorder long-term tables
 - `_attr_attribution = "Data provided by PostNL"` per entity
 - Letters sensor and per-letter `ImageEntity` for MyMail
+- **No `entry.add_update_listener`** — the delivered-parcels filter is
+  read live in the coordinator's `_apply_delivered_filter`, so the
+  OptionsFlow can just `async_create_entry` and the next poll picks up
+  the change. Combining a listener with a reload-on-update flow is
+  logged as a deprecation today and becomes an error in HA 2026.12+ —
+  see the
+  [config_entry_listener deprecation](https://developers.home-assistant.io/blog/2026/05/07/config-entry-listener-together-with-reloading-methods/).
+  Reauth still reloads via `async_update_reload_and_abort` (that is
+  correct and unrelated).
 
 ### Adopted in 4.0.0 (do not refactor away)
 
