@@ -130,7 +130,11 @@ re-propose these as improvements:
   `data_entry_flow.section`. The legacy hard-coded `POLL_INTERVAL`
   constant is gone — the coordinator reads `_refresh_interval(entry)`
   at startup, and the OptionsFlow triggers a reload on submit so a
-  changed interval takes effect immediately.
+  changed interval takes effect immediately. **Deliberate divergence**
+  from the `ha-integration-knowledge` skill rule "polling intervals are
+  NOT user-configurable": that rule targets HA Core integrations; this
+  is a HACS integration where a user-tunable poll cadence is a wanted
+  feature. Do not "fix" this to match the core rule.
 
 ## Planned for the next major bump
 

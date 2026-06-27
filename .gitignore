@@ -11,3 +11,4 @@ coverage.xml
 .secrets
 .pytest_cache
 docs/api/
+.claude/

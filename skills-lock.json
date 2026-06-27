@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "skills": {
+    "ha-integration-knowledge": {
+      "source": "home-assistant/core",
+      "sourceType": "github",
+      "skillPath": ".claude/skills/ha-integration-knowledge/SKILL.md",
+      "computedHash": "205f21832aee357842f17afbfe0e57b51c8fa34b7b9ac62ebec4cd529b637158"
+    },
+    "home-assistant-custom-integration": {
+      "source": "bradsjm/hassio-addons",
+      "sourceType": "github",
+      "skillPath": "addon-opencode/skills/home-assistant-custom-integration/SKILL.md",
+      "computedHash": "98e60cb77b2b9b0759f082191ecbb9241db8ff5e55dd05edca0a8fb59d6228ea"
+    }
+  }
+}
