@@ -4,14 +4,17 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from custom_components.postnl.const import ParcelStatus
+from custom_components.postnl.const import CONF_INCLUDE_HISTORY, ParcelStatus
 from custom_components.postnl.coordinator import (
     _DUTCH_MONTHS,
     PostNLCoordinator,
     _convert_native_dimensions,
     _delivery_dt,
+    _extract_observations,
     _refresh_interval,
+    build_history,
     extract_letters,
+    map_observation_status,
     map_parcel_status,
     normalize_parcel,
     parse_letter_date,
@@ -892,3 +895,302 @@ def test_sort_mixes_naive_and_aware_timestamps_without_crashing():
 
 def test_sort_empty_input_returns_empty_list():
     assert sort_parcels_by_ts([], "planned_from") == []
+
+
+# ---------------------------------------------------------------------------
+# map_observation_status
+# ---------------------------------------------------------------------------
+
+
+def test_map_observation_status_known_codes():
+    assert map_observation_status("A01") == ParcelStatus.REGISTERED
+    assert map_observation_status("B01") == ParcelStatus.IN_TRANSIT
+    assert map_observation_status("J01") == ParcelStatus.IN_TRANSIT
+    assert map_observation_status("J05") == ParcelStatus.OUT_FOR_DELIVERY
+    assert map_observation_status("J02") == ParcelStatus.AT_PICKUP_POINT
+    assert map_observation_status("J12") == ParcelStatus.AT_PICKUP_POINT
+
+
+def test_map_observation_status_live_catalogue_2026_06_29():
+    """Milestone codes gathered from a live account on 2026-06-29."""
+    assert map_observation_status("M02") == ParcelStatus.REGISTERED
+    # Sorting / route handling + genuine delays → in_transit
+    for code in ("J04", "J21", "J31", "J32", "J40", "J44", "G01"):
+        assert map_observation_status(code) == ParcelStatus.IN_TRANSIT, code
+    # Pickup point
+    assert map_observation_status("I08") == ParcelStatus.AT_PICKUP_POINT
+    # Delivered / collected
+    assert map_observation_status("I01") == ParcelStatus.DELIVERED
+    assert map_observation_status("I02") == ParcelStatus.DELIVERED
+    assert map_observation_status("I05") == ParcelStatus.DELIVERED
+    assert map_observation_status("A80") == ParcelStatus.DELIVERED  # signature = proof of delivery
+
+
+def test_map_observation_status_meta_codes_are_silent_null(caplog):
+    """Notification/admin codes are known → no movement status, no warning."""
+    for code in ("A04", "A18", "A19", "A25", "A65", "A94", "A95", "A96", "A98", "K33"):
+        assert map_observation_status(code, "some text") is None, code
+    assert "issues/new" not in caplog.text  # meta codes must not warn
+
+
+def test_build_history_meta_events_carry_forward_the_stage():
+    """Notification/admin events inherit the last milestone's stage rather than
+    bouncing the timeline backwards (the ETA-after-out_for_delivery case)."""
+    observations = [
+        {"observationDate": "2026-05-29T08:00:00+02:00", "observationCode": "A96", "description": "Bezorging wijzigen mogelijk"},
+        {"observationDate": "2026-05-29T09:00:00+02:00", "observationCode": "A01", "description": "nog niet ontvangen"},
+        {"observationDate": "2026-05-29T10:00:00+02:00", "observationCode": "B01", "description": "ontvangen door PostNL"},
+        {"observationDate": "2026-05-29T10:30:00+02:00", "observationCode": "A18", "description": "ETA initieel bepaald"},
+        {"observationDate": "2026-05-29T12:15:42+02:00", "observationCode": "J05", "description": "Bezorger is onderweg"},
+        {"observationDate": "2026-05-29T12:15:43+02:00", "observationCode": "A19", "description": "ETA gewijzigd"},
+        {"observationDate": "2026-05-29T14:34:26+02:00", "observationCode": "I01", "description": "Pakket is bezorgd"},
+    ]
+    statuses = [e["status"] for e in build_history(observations)]
+    assert statuses == [
+        ParcelStatus.REGISTERED,         # A96 before any milestone → registered baseline
+        ParcelStatus.REGISTERED,         # A01
+        ParcelStatus.IN_TRANSIT,         # B01
+        ParcelStatus.IN_TRANSIT,         # A18 carries in_transit (just after receipt)
+        ParcelStatus.OUT_FOR_DELIVERY,   # J05
+        ParcelStatus.OUT_FOR_DELIVERY,   # A19 carries out_for_delivery (not a step back)
+        ParcelStatus.DELIVERED,          # I01
+    ]
+
+
+def test_build_history_leading_meta_uses_registered_baseline():
+    """A meta event that lands before any milestone reads the registered
+    baseline (a tracked parcel is at least pre-announced), not null."""
+    observations = [
+        {"observationDate": "2026-05-10T21:06:41+02:00", "observationCode": "A98",
+         "description": "Voorgemelde zending verrijkt door PostNL regie."},
+    ]
+    assert build_history(observations)[0]["status"] == ParcelStatus.REGISTERED
+
+
+def test_build_history_unmapped_code_does_not_carry_forward():
+    """An unknown code stays null (we don't know it) even after a milestone."""
+    observations = [
+        {"observationDate": "2026-05-29T10:00:00+02:00", "observationCode": "B01", "description": "ontvangen"},
+        {"observationDate": "2026-05-29T11:00:00+02:00", "observationCode": "ZZ8", "description": "iets nieuws"},
+    ]
+    statuses = [e["status"] for e in build_history(observations)]
+    assert statuses == [ParcelStatus.IN_TRANSIT, None]
+
+
+def test_map_observation_status_none_for_missing_code():
+    assert map_observation_status(None) is None
+    assert map_observation_status("") is None
+
+
+def test_map_observation_status_none_for_unmapped_code(caplog):
+    # A distinct code so the one-shot dedupe set does not hide the warning.
+    assert map_observation_status("ZZ9", "Verstuurd via warpdrive") is None
+    assert "ZZ9" in caplog.text
+    assert "issues/new" in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# _extract_observations
+# ---------------------------------------------------------------------------
+
+
+def test_extract_observations_prefers_all_observations():
+    colli = {
+        "analyticsInfo": {"allObservations": [{"observationCode": "A01"}]},
+        "observations": [{"observationCode": "J05"}],
+    }
+    assert _extract_observations(colli) == [{"observationCode": "A01"}]
+
+
+def test_extract_observations_falls_back_to_observations():
+    colli = {"observations": [{"observationCode": "J05"}]}
+    assert _extract_observations(colli) == [{"observationCode": "J05"}]
+
+
+def test_extract_observations_empty_when_neither_present():
+    assert _extract_observations({}) == []
+    assert _extract_observations({"analyticsInfo": {}}) == []
+
+
+# ---------------------------------------------------------------------------
+# build_history
+# ---------------------------------------------------------------------------
+
+
+_OBSERVATIONS = [
+    {"observationDate": "2026-05-21T14:41:45.943+02:00", "observationCode": "A01", "description": "Pakket is nog niet ontvangen"},
+    {"observationDate": "2026-05-21T20:22:11+02:00", "observationCode": "B01", "description": "Pakket is ontvangen door PostNL"},
+    {"observationDate": "2026-05-22T10:06:45+02:00", "observationCode": "J01", "description": "Zending is gesorteerd"},
+    {"observationDate": "2026-05-22T11:01:21+02:00", "observationCode": "J05", "description": "Bezorger is onderweg"},
+]
+
+
+def test_build_history_entry_shape_and_order():
+    history = build_history(_OBSERVATIONS)
+    assert [e["status"] for e in history] == [
+        ParcelStatus.REGISTERED,
+        ParcelStatus.IN_TRANSIT,
+        ParcelStatus.IN_TRANSIT,
+        ParcelStatus.OUT_FOR_DELIVERY,
+    ]
+    # raw_status mirrors the Dutch description; timestamp passed through.
+    assert history[-1]["raw_status"] == "Bezorger is onderweg"
+    assert history[-1]["timestamp"] == "2026-05-22T11:01:21+02:00"
+    assert set(history[0]) == {"timestamp", "status", "raw_status"}
+
+
+def test_build_history_sorts_unsorted_input_oldest_first():
+    history = build_history(list(reversed(_OBSERVATIONS)))
+    assert history[0]["status"] == ParcelStatus.REGISTERED
+    assert history[-1]["status"] == ParcelStatus.OUT_FOR_DELIVERY
+
+
+def test_build_history_caps_to_max_events():
+    many = [
+        {"observationDate": f"2026-05-{day:02d}T10:00:00+02:00", "observationCode": "J01", "description": "Zending is gesorteerd"}
+        for day in range(1, 26)
+    ]
+    history = build_history(many)
+    assert len(history) == 20
+    # Keeps the most recent 20 — oldest five are dropped.
+    assert history[0]["timestamp"] == "2026-05-06T10:00:00+02:00"
+
+
+def test_build_history_respects_custom_cap():
+    assert len(build_history(_OBSERVATIONS, max_events=2)) == 2
+
+
+def test_build_history_unmapped_code_is_null_status():
+    history = build_history([
+        {"observationDate": "2026-05-22T11:01:21+02:00", "observationCode": "QQ1", "description": "Onbekend"},
+    ])
+    assert history[0]["status"] is None
+    assert history[0]["raw_status"] == "Onbekend"
+
+
+def test_build_history_skips_entries_without_timestamp():
+    history = build_history([
+        {"observationCode": "J05", "description": "no date"},
+        {"observationDate": "2026-05-22T11:01:21+02:00", "observationCode": "J05", "description": "ok"},
+    ])
+    assert len(history) == 1
+
+
+def test_build_history_keeps_unparseable_timestamp_after_parseable():
+    history = build_history([
+        {"observationDate": "garbage", "observationCode": "J05", "description": "bad"},
+        {"observationDate": "2026-05-22T11:01:21+02:00", "observationCode": "J01", "description": "good"},
+    ])
+    assert history[0]["raw_status"] == "good"
+    assert history[-1]["raw_status"] == "bad"
+
+
+def test_build_history_empty_for_no_observations():
+    assert build_history(None) == []
+    assert build_history([]) == []
+
+
+# ---------------------------------------------------------------------------
+# normalize_parcel — history field
+# ---------------------------------------------------------------------------
+
+
+def test_normalize_parcel_history_defaults_to_none():
+    parcel = normalize_parcel({
+        "barcode": "X", "delivered": False, "status_message": "Pakket is onderweg",
+    })
+    assert parcel["history"] is None
+
+
+def test_normalize_parcel_history_passes_through_top_level():
+    events = [{"timestamp": "2026-05-22T11:01:21+02:00", "status": "out_for_delivery", "raw_status": "Bezorger is onderweg"}]
+    parcel = normalize_parcel(
+        {"barcode": "X", "delivered": False, "status_message": "Pakket is onderweg"},
+        history=events,
+    )
+    assert parcel["history"] == events
+    # Top-level, so it survives the aggregator's strip_raw(); not duplicated under raw.
+    assert "history" not in parcel["raw"]
+
+
+# ---------------------------------------------------------------------------
+# transform_shipment — history wiring
+# ---------------------------------------------------------------------------
+
+
+def _make_history_coordinator(hass, *, include_history: bool):
+    entry = MagicMock()
+    entry.options = {CONF_INCLUDE_HISTORY: include_history}
+    coordinator = PostNLCoordinator(hass, entry)
+    coordinator.jouw_api = MagicMock()
+    return coordinator
+
+
+_ACTIVE_TT = {
+    "colli": {
+        "3SABC": {
+            "statusPhase": {"message": "Bezorger is onderweg"},
+            "analyticsInfo": {"allObservations": _OBSERVATIONS},
+        }
+    }
+}
+
+
+async def test_transform_shipment_builds_history_when_option_on(hass):
+    coordinator = _make_history_coordinator(hass, include_history=True)
+    coordinator.jouw_api.track_and_trace = MagicMock(return_value=_ACTIVE_TT)
+    shipment = {"key": "K", "barcode": "3SABC", "title": "Brand", "delivered": False}
+    parcel = await coordinator.transform_shipment(shipment)
+    assert parcel["history"] is not None
+    assert parcel["history"][-1]["status"] == ParcelStatus.OUT_FOR_DELIVERY
+
+
+async def test_transform_shipment_no_history_when_option_off(hass):
+    coordinator = _make_history_coordinator(hass, include_history=False)
+    coordinator.jouw_api.track_and_trace = MagicMock(return_value=_ACTIVE_TT)
+    shipment = {"key": "K", "barcode": "3SABC", "title": "Brand", "delivered": False}
+    parcel = await coordinator.transform_shipment(shipment)
+    assert parcel["history"] is None
+
+
+async def test_transform_shipment_delivered_fetches_history_when_option_on(hass):
+    coordinator = _make_history_coordinator(hass, include_history=True)
+    coordinator.jouw_api.track_and_trace = MagicMock(return_value=_ACTIVE_TT)
+    shipment = {
+        "key": "K", "barcode": "3SABC", "title": "Brand", "delivered": True,
+        "deliveredTimeStamp": "2026-05-22T12:00:00Z",
+    }
+    parcel = await coordinator.transform_shipment(shipment)
+    assert parcel["delivered"] is True
+    # Opt-in: delivered parcels DO call Track & Trace to get a timeline.
+    coordinator.jouw_api.track_and_trace.assert_called_once_with("K")
+    assert parcel["history"][-1]["status"] == ParcelStatus.OUT_FOR_DELIVERY
+
+
+async def test_transform_shipment_delivered_no_history_when_option_off(hass):
+    coordinator = _make_history_coordinator(hass, include_history=False)
+    shipment = {
+        "key": "K", "barcode": "3SABC", "title": "Brand", "delivered": True,
+        "deliveredTimeStamp": "2026-05-22T12:00:00Z",
+    }
+    parcel = await coordinator.transform_shipment(shipment)
+    assert parcel["history"] is None
+    # Default path must not make the extra call.
+    coordinator.jouw_api.track_and_trace.assert_not_called()
+
+
+async def test_transform_shipment_delivered_history_failure_is_non_fatal(hass):
+    import requests
+
+    coordinator = _make_history_coordinator(hass, include_history=True)
+    coordinator.jouw_api.track_and_trace = MagicMock(
+        side_effect=requests.exceptions.RequestException("boom")
+    )
+    shipment = {
+        "key": "K", "barcode": "3SABC", "title": "Brand", "delivered": True,
+        "deliveredTimeStamp": "2026-05-22T12:00:00Z",
+    }
+    parcel = await coordinator.transform_shipment(shipment)
+    # A failed history fetch must not break the delivered parcel.
+    assert parcel["delivered"] is True
+    assert parcel["history"] is None

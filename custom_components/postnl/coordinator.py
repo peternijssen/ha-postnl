@@ -15,11 +15,14 @@ from .auth import AsyncConfigEntryAuth
 from .const import (
     CONF_DELIVERED_FILTER_AMOUNT,
     CONF_DELIVERED_FILTER_TYPE,
+    CONF_INCLUDE_HISTORY,
     CONF_REFRESH_INTERVAL,
     DEFAULT_DELIVERED_FILTER_AMOUNT,
     DEFAULT_DELIVERED_FILTER_TYPE,
+    DEFAULT_INCLUDE_HISTORY,
     DEFAULT_REFRESH_INTERVAL,
     DOMAIN,
+    HISTORY_MAX_EVENTS,
     ParcelStatus,
 )
 from .graphql import PostNLGraphql
@@ -54,7 +57,72 @@ _STATUS_PATTERNS: tuple[tuple[str, ParcelStatus], ...] = (
     ("bezorgd", ParcelStatus.DELIVERED),
 )
 
+# History events carry a stable PostNL ``observationCode`` (e.g. ``J05``)
+# rather than the brittle human text, so the timeline maps from the code.
+# Unmapped codes resolve to ``None`` (+ a one-shot warning, see feature B).
+# Milestone codes — events that represent a real movement stage. These drive
+# the history ``status`` and progress monotonically (registered → in_transit →
+# out_for_delivery → delivered), with the one legitimate exception of a real
+# delivery delay/failure (G/T codes) dropping back to in_transit.
+_OBSERVATION_CODE_MAP: dict[str, ParcelStatus] = {
+    # --- Pre-receipt baseline (registered) ---
+    "A01": ParcelStatus.REGISTERED,       # nog niet ontvangen/verwerkt
+    "M02": ParcelStatus.REGISTERED,       # nog niet ontvangen/verwerkt (variant of A01)
+    # --- In the network (in_transit) ---
+    "B01": ParcelStatus.IN_TRANSIT,       # ontvangen door PostNL
+    "J01": ParcelStatus.IN_TRANSIT,       # gesorteerd
+    "J04": ParcelStatus.IN_TRANSIT,       # voorgemeld en gescand op rit
+    "J21": ParcelStatus.IN_TRANSIT,       # overgedragen aan afhaallocatie (handover, not yet ready)
+    "J31": ParcelStatus.IN_TRANSIT,       # ingenomen aan de sorteergoot
+    "J32": ParcelStatus.IN_TRANSIT,       # overgedragen tijdens route
+    "J40": ParcelStatus.IN_TRANSIT,       # voorgemeld en gesorteerd op rit
+    "J44": ParcelStatus.IN_TRANSIT,       # overgenomen tijdens route
+    "J55": ParcelStatus.IN_TRANSIT,       # verwacht bij PostNL-punt
+    # --- Real delivery delay / failed attempt: a genuine step back to transit ---
+    "G01": ParcelStatus.IN_TRANSIT,       # bezorgmoment bijgewerkt — lukt vandaag niet
+    "G05": ParcelStatus.IN_TRANSIT,       # bezorgmoment bijgewerkt (delay)
+    "T04": ParcelStatus.IN_TRANSIT,       # bezorgmoment bijgewerkt (delay)
+    # --- Out for delivery ---
+    "J05": ParcelStatus.OUT_FOR_DELIVERY, # bezorger is onderweg
+    # --- At a pickup point ---
+    "I08": ParcelStatus.AT_PICKUP_POINT,  # zending beschikbaar op PostNL-punt
+    "J02": ParcelStatus.AT_PICKUP_POINT,  # ligt klaar bij PostNL-punt
+    "J12": ParcelStatus.AT_PICKUP_POINT,  # ligt klaar bij PostNL-punt
+    # --- Delivered / collected (terminal) ---
+    "A80": ParcelStatus.DELIVERED,        # handtekening voor pakket ontvangen (proof of delivery)
+    "I01": ParcelStatus.DELIVERED,        # pakket is bezorgd
+    "I02": ParcelStatus.DELIVERED,        # afgehaald bij PostNL-punt
+    "I05": ParcelStatus.DELIVERED,        # bezorgd in de brievenbus
+}
+
+# Known notification / admin / data events that are NOT a movement milestone.
+# PostNL interleaves these throughout the timeline (often out of order), so
+# mapping them to a movement status makes the history bounce back and forth
+# (e.g. an "ETA gewijzigd" right after "Bezorger is onderweg" would otherwise
+# drag the status from out_for_delivery back to in_transit). They resolve to
+# ``status: null`` — known, so no "unrecognised" warning — while the exact
+# label is preserved on ``raw_status``.
+_OBSERVATION_META_CODES: frozenset[str] = frozenset({
+    "A04",  # PIOS melding (notification)
+    "A18",  # ETA initieel bepaald
+    "A19",  # ETA gewijzigd
+    "A25",  # reminderservice notificaties
+    "A65",  # zending herpland (planning change)
+    "A94",  # zelf bezorging gewijzigd
+    "A95",  # bezorging wijzigen niet mogelijk
+    "A96",  # bezorging wijzigen mogelijk
+    "A98",  # voorgemelde zending verrijkt door PostNL regie (data enrichment)
+    "K33",  # "leeg" placeholder
+})
+
+# New-issue link surfaced in the unknown-status warnings so users can paste a
+# ready-made line into a bug report.
+_NEW_ISSUE_URL = "https://github.com/peternijssen/ha-postnl/issues/new"
+
+# One-shot dedupe sets so each distinct unmapped value warns once per HA
+# session rather than on every poll.
 _LOGGED_UNKNOWN_STATUSES: set[str] = set()
+_LOGGED_UNKNOWN_OBSERVATION_CODES: set[str] = set()
 
 
 def _refresh_interval(entry: ConfigEntry) -> timedelta:
@@ -88,14 +156,116 @@ def map_parcel_status(parcel: dict) -> ParcelStatus:
 
     if raw not in _LOGGED_UNKNOWN_STATUSES:
         _LOGGED_UNKNOWN_STATUSES.add(raw)
-        _LOGGER.info(
-            "Unmapped PostNL status %r will be reported as ParcelStatus.UNKNOWN. "
-            "Please open an issue at "
-            "https://github.com/peternijssen/ha-postnl/issues so the map can "
-            "be extended.",
+        _LOGGER.warning(
+            "Unrecognised PostNL status — help us map it. Open an issue and "
+            "paste this line: %s\n  [parcel] statusPhase.message=%r "
+            "→ reported as 'unknown'",
+            _NEW_ISSUE_URL,
             parcel.get("status_message"),
         )
     return ParcelStatus.UNKNOWN
+
+
+def map_observation_status(
+    code: str | None, description: str | None = None
+) -> ParcelStatus | None:
+    """Map a Track & Trace ``observationCode`` to a canonical milestone status.
+
+    Returns a :class:`ParcelStatus` only for genuine movement milestones.
+    Known notification/admin codes (:data:`_OBSERVATION_META_CODES`) and
+    unmapped codes both return ``None``; meta codes do so silently, while an
+    unmapped code surfaces a one-shot warning with copy-paste issue text so
+    users can help extend the map. :func:`build_history` decides what a
+    ``None`` becomes (carry the previous stage forward for meta, leave null
+    for unknown).
+    """
+    if not code:
+        return None
+    status = _OBSERVATION_CODE_MAP.get(code)
+    if status is not None:
+        return status
+
+    if code in _OBSERVATION_META_CODES:
+        return None  # known notification/admin event — no own movement status
+
+    if code not in _LOGGED_UNKNOWN_OBSERVATION_CODES:
+        _LOGGED_UNKNOWN_OBSERVATION_CODES.add(code)
+        _LOGGER.warning(
+            "Unrecognised PostNL status — help us map it. Open an issue and "
+            "paste this line: %s\n  [history] observationCode=%s text=%r "
+            "→ reported as 'unknown'",
+            _NEW_ISSUE_URL,
+            code,
+            description,
+        )
+    return None
+
+
+def _extract_observations(colli: dict) -> list[dict]:
+    """Return the status-event list from a colli object, oldest-first preferred.
+
+    ``analyticsInfo.allObservations`` carries the **complete** timeline
+    (oldest-first); the top-level ``observations`` list is truncated to the
+    most recent few. Prefer the former, fall back to the latter.
+    """
+    analytics = colli.get("analyticsInfo") or {}
+    return analytics.get("allObservations") or colli.get("observations") or []
+
+
+def build_history(
+    observations: list[dict] | None, *, max_events: int = HISTORY_MAX_EVENTS
+) -> list[dict]:
+    """Build the canonical ``history`` list from raw Track & Trace observations.
+
+    Each entry is ``{timestamp, status, raw_status}`` — identical across all
+    suite carriers. Sorted oldest → newest by timestamp (entries with an
+    unparseable timestamp keep their original order, after the parseable ones)
+    and capped to the most recent ``max_events``.
+
+    PostNL interleaves notification/admin events (ETA recalcs, "bezorging
+    wijzigen mogelijk", data enrichment, …) throughout the timeline, often out
+    of order. Those carry **no movement status of their own**; instead they
+    inherit the stage of the most recent milestone (carry-forward), so the
+    timeline never bounces backwards on a cosmetic event — e.g. an "ETA
+    gewijzigd" logged the moment the courier sets off reads ``out_for_delivery``,
+    while the same code earlier (just after sorting) reads ``in_transit``.
+    Genuine milestones drive the status and only a real delivery delay (G/T)
+    steps back to ``in_transit``. Unmapped codes stay ``null`` (+ warning).
+    """
+    parseable: list[tuple[datetime, tuple]] = []
+    unparseable: list[tuple] = []
+    for obs in observations or []:
+        timestamp = obs.get("observationDate")
+        if not timestamp:
+            continue
+        record = (timestamp, obs.get("observationCode"), obs.get("description"))
+        dt = _parse_iso(timestamp)
+        if dt is None:
+            unparseable.append(record)
+        else:
+            parseable.append((dt, record))
+    parseable.sort(key=lambda item: item[0])
+    ordered = [record for _, record in parseable] + unparseable
+
+    history: list[dict] = []
+    # A parcel that appears in track-trace has, at minimum, been pre-announced,
+    # so the implicit baseline stage is REGISTERED. This is what a meta event
+    # (e.g. "Voorgemelde zending verrijkt") inherits when it lands before the
+    # first real milestone, instead of showing a bare null.
+    last_status: ParcelStatus | None = ParcelStatus.REGISTERED
+    for timestamp, code, description in ordered:
+        status = map_observation_status(code, description)
+        if status is not None:
+            last_status = status
+        elif code in _OBSERVATION_META_CODES:
+            # Known notification/admin event — show the stage the parcel was
+            # already in rather than inventing a (backwards) movement.
+            status = last_status
+        # else: unmapped → leave None (map_observation_status already warned)
+        history.append(
+            {"timestamp": timestamp, "status": status, "raw_status": description}
+        )
+    return history[-max_events:]
 
 
 def _convert_native_dimensions(
@@ -131,7 +301,7 @@ def _convert_native_dimensions(
     }
 
 
-def normalize_parcel(parcel: dict) -> dict:
+def normalize_parcel(parcel: dict, *, history: list[dict] | None = None) -> dict:
     """Wrap a transformed PostNL parcel in the canonical carrier-agnostic shape.
 
     Top-level keys mirror DHL / DPD / parcel-aggregator. The original
@@ -139,6 +309,10 @@ def normalize_parcel(parcel: dict) -> dict:
     ``status_message``, ``delivery_address_type``, ``planned_date``,
     ``expected_datetime`` and the native ``dimensions`` dict in g + mm)
     is preserved under ``raw`` for power users.
+
+    ``history`` is the optional per-parcel status timeline (opt-in option,
+    default off → ``None``). It stays top-level so it survives the
+    aggregator's ``strip_raw()`` and flows through unchanged.
     """
     delivered = bool(parcel.get("delivered"))
     weight_kg, canonical_dimensions = _convert_native_dimensions(
@@ -160,22 +334,31 @@ def normalize_parcel(parcel: dict) -> dict:
         "url": parcel.get("url"),
         "weight": weight_kg,
         "dimensions": canonical_dimensions,
+        "history": history,
         "raw": parcel,
     }
 
 
-def _delivery_dt(parcel: dict) -> datetime | None:
-    """Parse the delivery datetime from a normalised parcel dict."""
-    date_str = parcel.get("delivered_at")
-    if not date_str:
+def _parse_iso(value: str | None) -> datetime | None:
+    """Parse an ISO 8601 string to an aware datetime, or ``None`` on failure.
+
+    PostNL mixes offset-aware and naive timestamps in the same payload; naive
+    values are treated as UTC so a mixed list still sorts without crashing.
+    """
+    if not value:
         return None
     try:
-        dt = datetime.fromisoformat(str(date_str).replace("Z", "+00:00"))
+        dt = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
     except ValueError:
         return None
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt
+
+
+def _delivery_dt(parcel: dict) -> datetime | None:
+    """Parse the delivery datetime from a normalised parcel dict."""
+    return _parse_iso(parcel.get("delivered_at"))
 
 
 def sort_parcels_by_ts(
@@ -462,6 +645,38 @@ class PostNLCoordinator(DataUpdateCoordinator):
 
         return parcels[:filter_amount]
 
+    @property
+    def _include_history(self) -> bool:
+        """Whether the opt-in per-parcel history option is enabled."""
+        return bool(
+            self.config_entry.options.get(
+                CONF_INCLUDE_HISTORY, DEFAULT_INCLUDE_HISTORY
+            )
+        )
+
+    def _delivered_history(self, shipment) -> list[dict] | None:
+        """Fetch a history timeline for a delivered shipment (opt-in only).
+
+        The active path gets observations from the Track & Trace call it
+        already makes, but delivered parcels normally skip that call. When the
+        history option is on we make the extra call here so delivered parcels
+        get parity with DHL / DPD. A failure is non-fatal — history is a
+        nice-to-have, so we log and fall back to ``None`` rather than failing
+        the whole refresh.
+        """
+        if not self._include_history:
+            return None
+        try:
+            details = self.jouw_api.track_and_trace(shipment['key'])
+        except requests.exceptions.RequestException as exception:
+            _LOGGER.warning(
+                "History fetch failed for delivered shipment %s: %s",
+                shipment.get('key'), exception,
+            )
+            return None
+        colli = details.get('colli', {}).get(shipment['barcode'], {})
+        return build_history(_extract_observations(colli)) if colli else None
+
     async def transform_shipment(self, shipment) -> dict:
         _LOGGER.debug('Updating %s', shipment.get('key'))
 
@@ -475,7 +690,11 @@ class PostNLCoordinator(DataUpdateCoordinator):
                 # ``colli.recipient.names.personName`` to read — the GraphQL
                 # ``receiverTitle`` is the equivalent. No weight/dimensions
                 # available on this path; the suite contract accepts those as
-                # ``None``.
+                # ``None``. History is the one exception: when the opt-in
+                # option is on we make an extra T&T call for the timeline.
+                history = await self.hass.async_add_executor_job(
+                    self._delivered_history, shipment
+                )
                 return normalize_parcel({
                     "key": shipment.get('key'),
                     "barcode": shipment.get('barcode'),
@@ -498,7 +717,7 @@ class PostNLCoordinator(DataUpdateCoordinator):
                     "planned_to": None,
                     "expected_datetime": None,
                     "dimensions": None,
-                })
+                }, history=history)
 
             _LOGGER.debug("Fetching Track and Trace details for shipment %s.", shipment['key'])
             track_and_trace_details = await self.hass.async_add_executor_job(self.jouw_api.track_and_trace,
@@ -514,6 +733,7 @@ class PostNLCoordinator(DataUpdateCoordinator):
             planned_date = planned_from = planned_to = expected_datetime = None
             recipient_name: str | None = None
             native_dimensions: dict | None = None
+            history: list[dict] | None = None
 
             if colli:
                 _LOGGER.debug("Colli details found for shipment %s: %s", shipment['key'], colli)
@@ -537,6 +757,13 @@ class PostNLCoordinator(DataUpdateCoordinator):
                     colli.get('recipient', {}).get('names', {}).get('personName')
                 )
                 native_dimensions = (colli.get('details') or {}).get('dimensions')
+                # The active T&T call already carries the timeline; only build
+                # it when the opt-in option is on.
+                history = (
+                    build_history(_extract_observations(colli))
+                    if self._include_history
+                    else None
+                )
             else:
                 _LOGGER.warning("Barcode not found in colli details for shipment %s.", shipment['key'])
                 planned_date = shipment.get('deliveryWindowFrom')
@@ -573,7 +800,7 @@ class PostNLCoordinator(DataUpdateCoordinator):
                 # users; ``normalize_parcel`` reads it and produces the
                 # canonical kg + cm + ``text`` shape at the top level.
                 "dimensions": native_dimensions,
-            })
+            }, history=history)
         except requests.exceptions.RequestException as exception:
             _LOGGER.error("Error fetching Track and Trace details for shipment %s: %s", shipment.get('key'), exception, exc_info=True)
             raise UpdateFailed("Unable to update PostNL data") from exception

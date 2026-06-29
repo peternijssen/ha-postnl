@@ -55,6 +55,15 @@
               "delivered_filter_amount": "Aantal dagen of pakketten om weer te geven."
             }
           },
+          "history": {
+            "name": "Pakketgeschiedenis",
+            "data": {
+              "include_history": "Statusgeschiedenis toevoegen"
+            },
+            "data_description": {
+              "include_history": "Voegt een geschiedenis-attribuut per pakket toe met elke statusupdate (tijdstip, status, originele tekst). Standaard uit — voor bezorgde pakketten is hiervoor een extra ophaalactie per verversing nodig."
+            }
+          },
           "polling": {
             "name": "Polling",
             "data": {

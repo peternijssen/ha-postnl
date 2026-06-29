@@ -154,6 +154,58 @@ re-propose these as improvements:
     `ConfigEntryNotReady`. This is what stopped the "logged out roughly
     once a day" bug — do not collapse these back into one auth failure.
 
+### Adopted in 4.2.0 — history (do not refactor away)
+
+- **Per-parcel `history`** — a new top-level canonical field (alongside
+  `status`, `weight`, …): an ordered list (oldest → newest) of
+  `{timestamp, status, raw_status}` events, capped to the most recent
+  `HISTORY_MAX_EVENTS` (20). Built by `build_history` in
+  `coordinator.py` from the Track & Trace `analyticsInfo.allObservations`
+  list (`_extract_observations` prefers it over the truncated
+  `observations`). Kept identical across DHL / DPD / PostNL so the
+  aggregator and cross-carrier dashboards read every carrier the same
+  way. It is top-level (not under `raw`) so it survives the aggregator's
+  `strip_raw()`.
+- **Opt-in, default OFF.** Options-flow boolean `CONF_INCLUDE_HISTORY`
+  in its own `history` section, `async_schedule_reload` on submit (same
+  pattern as `CONF_REFRESH_INTERVAL`). When off, `history` is `None` —
+  the key is never omitted (parity with `weight`/`dimensions`).
+- **Delivered parcels get history too** (user decision, parity with
+  DHL/DPD). The delivered short-circuit normally skips Track & Trace; when
+  the option is on, `_delivered_history` makes the extra T&T call. That
+  call is **non-fatal** — a `RequestException` there logs and falls back
+  to `history = None` rather than failing the whole refresh (unlike the
+  active-path call, which is essential and propagates to `UpdateFailed`).
+- **Per-event status** maps from the stable `observationCode` via
+  `_OBSERVATION_CODE_MAP` + `map_observation_status` (NOT the Dutch
+  text). Unmapped codes → `null` (history) and a one-shot **warning**.
+  The code catalogue lives in `docs/api/track_and_trace.md` (local-only).
+- **Milestone vs meta + carry-forward (do not undo).** PostNL interleaves
+  notification/admin/ETA events out of order. Only *milestone* codes
+  (`_OBSERVATION_CODE_MAP`) carry a movement status; *meta* codes
+  (`_OBSERVATION_META_CODES`, e.g. ETA recalcs, "bezorging wijzigen",
+  data enrichment) carry **none** — `build_history` walks the events
+  chronologically and makes a meta event **inherit the previous
+  milestone's stage** (carry-forward) so the timeline never bounces
+  backwards on a cosmetic event. Before the first milestone the carry
+  baseline is `registered` (a tracked parcel is at least pre-announced),
+  so a leading meta event like "Voorgemelde zending verrijkt" reads
+  `registered` instead of a bare null. The one legitimate step-back is a real
+  delivery delay/failure (`G01`/`G05`/`T04` → `in_transit`). Unmapped
+  codes stay `null` (and do NOT carry forward — we genuinely don't know
+  them). A fixed status for ETA codes is wrong by construction: the same
+  ETA code reads `out_for_delivery` next to "Bezorger is onderweg" but
+  `in_transit` right after sorting — carry-forward resolves both.
+- **Feature B — unknown-status warnings.** Both the parcel status
+  (`map_parcel_status`) and the history `observationCode`
+  (`map_observation_status`) log **once per distinct unmapped value** at
+  **WARNING** level with a copy-paste `issues/new` link (`_NEW_ISSUE_URL`).
+  This replaced the old terse info log. Two parallel one-shot sets:
+  `_LOGGED_UNKNOWN_STATUSES`, `_LOGGED_UNKNOWN_OBSERVATION_CODES`.
+- **Recorder:** `history` is in `_unrecorded_attributes` on
+  `PostNLParcelSensor`. Summary sensors already keep the whole parcel
+  list out of the recorder via the `parcels` attribute.
+
 ## Planned for the next major bump
 
 - **Exception translations** (Gold-tier rule). `UpdateFailed(...)`

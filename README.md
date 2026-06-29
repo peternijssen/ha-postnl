@@ -26,6 +26,7 @@ and announced MyMail letters.
 
 - Incoming and outgoing active-parcel count sensors
 - Per-parcel sensor per active incoming shipment, with full status details as attributes
+- Optional per-parcel status history timeline (opt-in; off by default)
 - Configurable delivered-parcels sensor (last N days, or N most recent)
 - Next delivery datetime sensor (device class `timestamp`)
 - PostNL Punt sensor — parcels destined for a PostNL Point pickup location
@@ -69,7 +70,7 @@ and announced MyMail letters.
 
 ## Options
 
-Click **Configure** on the integration card. The form is split into two
+Click **Configure** on the integration card. The form is split into three
 sections:
 
 ### Delivered parcels
@@ -78,6 +79,12 @@ sections:
 |---|---|
 | Filter by | `Days` keeps delivered parcels visible for the last N days. `Number of parcels` keeps only the N most recent regardless of age. |
 | Amount | The N used by the filter above. |
+
+### Parcel history
+
+| Option | Description |
+|---|---|
+| Include status history | Adds a `history` attribute to each parcel — the ordered list of status updates (timestamp, canonical status, original PostNL text), capped to the most recent 20. **Off by default.** For delivered parcels this needs one extra lookup per refresh, so only enable it if you want the full timeline. The attribute is kept out of the recorder database. |
 
 ### Polling
 
@@ -130,6 +137,7 @@ Every parcel exposed on a sensor attribute uses a carrier-agnostic shape:
 | `url` | string \| null | Deep link to the parcel's tracking page on jouw.postnl.nl |
 | `weight` | float \| null | Parcel weight in kilograms. May be `null` for delivered parcels or when PostNL has not yet attached the data. |
 | `dimensions` | dict \| null | Parcel dimensions in centimeters: `{length, width, height, text}` where `text` is a pre-formatted `"L x W x H cm"` string. Same coverage as `weight`. |
+| `history` | list \| null | Ordered status timeline (oldest → newest), each entry `{timestamp, status, raw_status}`, capped to the most recent 20. `null` unless the **Parcel history** option is enabled — see [Options](#options). |
 | `raw` | dict | The original PostNL payload |
 
 Each announced letter is exposed as an `image` entity so the scan
@@ -152,7 +160,7 @@ users.
 | `at_pickup_point` | Arrived at the chosen PostNL Point, ready to be collected | `statusPhase.message` containing "ligt klaar bij postnl punt" or similar |
 | `delivered` | Handed over (mailbox, recipient, neighbour, picked up) | `shipment.delivered == true` (authoritative); fallback `statusPhase.message` containing "bezorgd" |
 | `returning` | Failed delivery, on the way back to the sender | `statusPhase.message` containing "retour" or "teruggestuurd" |
-| `unknown` | Raw description we have not mapped yet | anything else — logged once at info level so it can be added to the map |
+| `unknown` | Raw description we have not mapped yet | anything else — logged once at warning level with a ready-to-paste issue link so it can be added to the map |
 
 Because PostNL's `statusPhase.message` is a human-readable Dutch string
 (not a stable API enum), the mapping uses ordered substring matching
