@@ -6,6 +6,7 @@ DOMAIN = "postnl"
 
 PLATFORMS = [
     Platform.BUTTON,
+    Platform.CALENDAR,
     Platform.SENSOR,
     Platform.IMAGE,
 ]

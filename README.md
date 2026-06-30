@@ -14,8 +14,6 @@ and announced MyMail letters.
 - [Sensors](#sensors)
 - [Parcel status reference](#parcel-status-reference)
 - [Events](#events)
-- [Device triggers](#device-triggers)
-- [Buttons](#buttons)
 - [Examples](#examples)
 - [Debugging](#debugging)
 - [Troubleshooting](#troubleshooting)
@@ -33,8 +31,6 @@ and announced MyMail letters.
 - Next delivery datetime sensor (device class `timestamp`)
 - PostNL Punt sensor — parcels destined for a PostNL Point pickup location
 - MyMail letters sensor plus a per-letter image entity holding the scanned photo
-- Refresh button to force an immediate poll
-- Device triggers for no-code parcel and letter automations
 - Automatic lifecycle management — per-parcel sensors are created and removed as parcels move through delivery
 - Re-authentication support — silently refreshes the PostNL token, prompts only when the refresh fails
 
@@ -191,9 +187,10 @@ the parcel or letter belongs to, so automations can tell two accounts apart.
 
 Events do not fire for parcels or letters that were already in your account when HA first started.
 
-Prefer the no-code [device triggers](#device-triggers) below if you build
-your automations in the UI; the raw events are there for templates and
-YAML automations.
+If you build automations in the UI, these same events are also available
+as no-code **device triggers** (**Settings → Automations → Create → Add
+trigger → Device**), scoped to the selected account's device. The raw
+events above are there for templates and YAML automations.
 
 See [`examples/automations/`](examples/automations/) for ready-to-paste
 event-driven automations, or the
@@ -201,28 +198,6 @@ event-driven automations, or the
 for a carrier-agnostic re-emit layer that fires
 `parcel_aggregator_parcel_*` events covering every installed carrier
 in one go.
-
-## Device triggers
-
-Each PostNL device exposes the parcel and letter events above as **device
-triggers**, so you can build automations from the UI (**Settings →
-Automations → Create → Add trigger → Device**) without typing event names:
-
-| Trigger | Fires when |
-|---|---|
-| A parcel was registered | A new barcode appears in the active list |
-| A parcel's status changed | A parcel's canonical status changes |
-| A parcel's expected delivery time changed | A parcel gains or updates an expected delivery time |
-| A letter was announced | A new letter appears in the MyMail feed |
-
-Triggers are scoped to the selected account's device, so a multi-account
-setup only fires for the device you picked.
-
-## Buttons
-
-| Friendly name pattern | Description |
-|---|---|
-| `PostNL (account) Refresh` | Forces an immediate poll of PostNL — handy when a parcel is expected and you don't want to wait for the next scheduled refresh. |
 
 ## Examples
 

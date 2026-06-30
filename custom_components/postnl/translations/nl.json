@@ -99,6 +99,11 @@
         "name": "Verversen"
       }
     },
+    "calendar": {
+      "deliveries": {
+        "name": "Bezorgingen"
+      }
+    },
     "sensor": {
       "incoming_parcels": {
         "name": "Inkomende pakketten",

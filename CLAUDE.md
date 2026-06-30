@@ -234,6 +234,22 @@ re-propose these as improvements:
   this guard it deletes the refresh button (`{account_id}_refresh`) **and
   the letter image entities** (`{account_id}_letter_image_*`) on every
   setup. Do not drop the domain check.
+- **Deliveries `calendar`** (`Platform.CALENDAR` in `PLATFORMS`,
+  `calendar.py`). One `PostNLDeliveriesCalendar` per account, unique_id
+  `{account_id}_deliveries`, `translation_key="deliveries"`. Read-only
+  view over the non-delivered `coordinator.data["receiver"]` parcels —
+  **no extra API calls**, so enabled by default (no options toggle). One
+  `CalendarEvent` per active incoming parcel with a `planned_from`; `end`
+  is `planned_to` or `planned_from + 1h`. `event` returns the soonest
+  event whose `end > dt_util.now()`. Summary = sender (falls back to
+  barcode); pickup parcels set `location`. Letters are NOT on the calendar
+  (no delivery moment). A combined cross-carrier calendar lives in the
+  **aggregator**, not here.
+- **README stays lean** (see suite README house style): no `## Buttons`
+  or `## Device triggers` sections; the device-trigger option is a single
+  sentence folded into **Events**. The button and calendar are not
+  documented in the README at all (discoverable in the HA UI). CLAUDE.md
+  still documents everything.
 
 ## Planned for the next major bump
 

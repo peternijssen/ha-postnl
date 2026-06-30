@@ -5,6 +5,11 @@
         "default": "mdi:refresh"
       }
     },
+    "calendar": {
+      "deliveries": {
+        "default": "mdi:truck-delivery-outline"
+      }
+    },
     "sensor": {
       "incoming_parcels": {
         "default": "mdi:package-variant-closed"
