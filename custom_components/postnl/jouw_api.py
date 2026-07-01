@@ -12,6 +12,11 @@ class PostNLJouwAPI:
 
     mymail_url: str = "https://jouw.postnl.nl/services/serverdrivenui/api/MyMail/letter"
 
+    # (connect, read) timeout for every call. requests has no session-level
+    # default; without this a hanging PostNL server blocks an executor
+    # thread — and with it the whole refresh — indefinitely.
+    timeout: tuple[int, int] = (10, 60)
+
     # The MyMail endpoints reject requests that only carry the bearer token; the
     # app-identification headers must be present on letter and image calls alike.
     mymail_headers: dict[str, str] = {
@@ -41,18 +46,23 @@ class PostNLJouwAPI:
         }
 
     def track_and_trace(self, key):
-        response = self.client.get(self.base_url + "/api/trackAndTrace/" + key + "?language=nl")
+        response = self.client.get(
+            self.base_url + "/api/trackAndTrace/" + key + "?language=nl",
+            timeout=self.timeout,
+        )
 
         return response.json()
 
     def letters(self):
-        response = self.client.get(self.mymail_url, headers=self.mymail_headers)
+        response = self.client.get(
+            self.mymail_url, headers=self.mymail_headers, timeout=self.timeout
+        )
         response.raise_for_status()
         return response.json()
 
     def image(self, url: str) -> tuple[bytes, str]:
         """Fetch the raw bytes of a letter image, requiring the same auth as letters()."""
-        response = self.client.get(url, headers=self.mymail_headers)
+        response = self.client.get(url, headers=self.mymail_headers, timeout=self.timeout)
         response.raise_for_status()
         content_type = response.headers.get("content-type", "image/jpeg")
         return response.content, content_type
