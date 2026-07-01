@@ -36,7 +36,8 @@
     },
     "abort": {
       "already_configured": "This account is already configured.",
-      "reauth_successful": "Re-authentication was successful."
+      "reauth_successful": "Re-authentication was successful.",
+      "unique_id_mismatch": "Re-authenticate with the same PostNL account this entry was set up with."
     }
   },
   "options": {

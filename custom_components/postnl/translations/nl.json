@@ -36,7 +36,8 @@
     },
     "abort": {
       "already_configured": "Dit account is al geconfigureerd.",
-      "reauth_successful": "Opnieuw inloggen geslaagd."
+      "reauth_successful": "Opnieuw inloggen geslaagd.",
+      "unique_id_mismatch": "Log opnieuw in met hetzelfde PostNL-account waarmee deze koppeling is ingesteld."
     }
   },
   "options": {

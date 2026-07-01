@@ -131,6 +131,11 @@ class PostNLConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             token, errors = await self._do_login(user_input)
             if not errors:
+                # Guard against re-authenticating with a *different* PostNL
+                # account — the entry (and all its entities) belong to the
+                # original account's unique_id.
+                await self.async_set_unique_id(user_input[CONF_USERNAME].lower())
+                self._abort_if_unique_id_mismatch()
                 reauth_entry = self._get_reauth_entry()
                 return self.async_update_reload_and_abort(
                     reauth_entry,

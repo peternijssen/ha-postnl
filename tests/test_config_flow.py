@@ -173,6 +173,32 @@ async def test_reauth_flow_surfaces_invalid_auth(hass):
     assert entry.data[CONF_PASSWORD] == _USER_INPUT[CONF_PASSWORD]
 
 
+async def test_reauth_flow_aborts_on_different_account(hass):
+    """Reauthenticating with another account's credentials aborts the flow."""
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id=_USER_INPUT[CONF_USERNAME].lower(),
+        data={**_USER_INPUT, "token": _TOKEN},
+    )
+    entry.add_to_hass(hass)
+
+    with patch(
+        "custom_components.postnl.config_flow.PostNLAuth.async_login",
+        new=AsyncMock(return_value=_TOKEN),
+    ):
+        result = await entry.start_reauth_flow(hass)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            user_input={CONF_USERNAME: "other@example.com", CONF_PASSWORD: "pw"},
+        )
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "unique_id_mismatch"
+    assert entry.data[CONF_USERNAME] == _USER_INPUT[CONF_USERNAME]
+
+
 async def test_options_flow_updates_filter_and_polling(hass):
     """Submitting the sectioned options form persists both buckets."""
     from pytest_homeassistant_custom_component.common import MockConfigEntry
