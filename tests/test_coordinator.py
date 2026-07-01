@@ -1244,3 +1244,82 @@ async def test_device_id_none_when_no_device(hass):
 
     coordinator = PostNLCoordinator(hass, entry)
     assert coordinator._device_id() is None
+
+async def test_transform_shipment_delivered_history_cached_per_barcode(hass):
+    """A delivered parcel's history is fetched once, then served from cache."""
+    coordinator = _make_history_coordinator(hass, include_history=True)
+    coordinator.jouw_api.track_and_trace = MagicMock(return_value=_ACTIVE_TT)
+    shipment = {
+        "key": "K", "barcode": "3SABC", "title": "Brand", "delivered": True,
+        "deliveredTimeStamp": "2026-05-22T12:00:00Z",
+    }
+    first = await coordinator.transform_shipment(shipment)
+    second = await coordinator.transform_shipment(shipment)
+    coordinator.jouw_api.track_and_trace.assert_called_once_with("K")
+    assert second["history"] == first["history"]
+
+
+async def test_transform_shipment_delivered_history_failure_not_cached(hass):
+    """A failed history fetch is retried on the next poll (not cached)."""
+    import requests
+
+    coordinator = _make_history_coordinator(hass, include_history=True)
+    coordinator.jouw_api.track_and_trace = MagicMock(
+        side_effect=[requests.exceptions.ConnectionError("boom"), _ACTIVE_TT]
+    )
+    shipment = {
+        "key": "K", "barcode": "3SABC", "title": "Brand", "delivered": True,
+        "deliveredTimeStamp": "2026-05-22T12:00:00Z",
+    }
+    first = await coordinator.transform_shipment(shipment)
+    assert first["history"] is None
+    second = await coordinator.transform_shipment(shipment)
+    assert second["history"] is not None
+    assert coordinator.jouw_api.track_and_trace.call_count == 2
+
+
+# ---------------------------------------------------------------------------
+# transform_shipment — per-parcel degradation on Track & Trace failure
+# ---------------------------------------------------------------------------
+
+
+async def test_transform_shipment_reuses_cached_parcel_on_tt_failure(hass):
+    """A transient T&T failure degrades to the previous transform for that
+    parcel instead of failing the whole refresh."""
+    import requests
+
+    coordinator = _make_coordinator(hass)
+    coordinator.jouw_api.track_and_trace = MagicMock(return_value={
+        "colli": {
+            "3SABC": {"statusPhase": {"message": "Onderweg"}}
+        }
+    })
+    shipment = {"key": "K", "barcode": "3SABC", "title": "Brand", "delivered": False}
+    good = await coordinator.transform_shipment(shipment)
+    assert good["status"] == ParcelStatus.IN_TRANSIT
+
+    coordinator.jouw_api.track_and_trace = MagicMock(
+        side_effect=requests.exceptions.ConnectionError("boom")
+    )
+    degraded = await coordinator.transform_shipment(shipment)
+    assert degraded == good
+
+
+async def test_transform_shipment_falls_back_to_shipment_fields_on_tt_failure(hass):
+    """Without a cached transform, a T&T failure still yields a parcel built
+    from the GraphQL shipment fields rather than raising."""
+    import requests
+
+    coordinator = _make_coordinator(hass)
+    coordinator.jouw_api.track_and_trace = MagicMock(
+        side_effect=requests.exceptions.ConnectionError("boom")
+    )
+    shipment = {
+        "key": "K", "barcode": "3SABC", "title": "Brand", "delivered": False,
+        "deliveryWindowFrom": "2026-06-17T14:00:00Z",
+        "deliveryWindowTo": "2026-06-17T16:00:00Z",
+    }
+    parcel = await coordinator.transform_shipment(shipment)
+    assert parcel["barcode"] == "3SABC"
+    assert parcel["planned_from"] == "2026-06-17T14:00:00Z"
+    assert parcel["status"] == ParcelStatus.UNKNOWN

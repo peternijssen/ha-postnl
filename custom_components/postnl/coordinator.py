@@ -452,8 +452,6 @@ def extract_letters(payload: dict, *, today: datetime | None = None) -> list[dic
 
 class PostNLCoordinator(DataUpdateCoordinator):
     data: dict[str, list[dict]]
-    graphq_api: PostNLGraphql
-    jouw_api: PostNLJouwAPI
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         """Initialize PostNL coordinator."""
@@ -466,6 +464,12 @@ class PostNLCoordinator(DataUpdateCoordinator):
         )
         self.delivered_receiver: list[dict] = []
         self.letters: list[dict] = []
+        # API clients are reused across polls (each PostNLJouwAPI owns a
+        # requests.Session with a connection pool); they are only rebuilt
+        # when the access token actually changes.
+        self.graphq_api: PostNLGraphql | None = None
+        self.jouw_api: PostNLJouwAPI | None = None
+        self._api_token: str | None = None
         # barcode -> last seen ParcelStatus. ``None`` on the first refresh so
         # we can suppress events for parcels that already existed when the
         # integration started (we do not know their previous state).
@@ -479,6 +483,14 @@ class PostNLCoordinator(DataUpdateCoordinator):
         # on the first refresh for the same reason — we do not want to fire
         # ``postnl_letter_announced`` for every letter that already existed.
         self._known_letter_ids: set[str] | None = None
+        # barcode -> last successfully transformed (normalized) parcel, so a
+        # transient Track & Trace failure for one parcel degrades to its
+        # previous data instead of failing the whole refresh.
+        self._parcel_cache: dict[str, dict] = {}
+        # barcode -> history timeline for *delivered* parcels. A delivered
+        # parcel's history never changes, so the extra T&T call is made at
+        # most once per barcode instead of on every poll.
+        self._delivered_history_cache: dict[str, list[dict] | None] = {}
         # Cached device id for this account, attached to every fired event so
         # device-trigger automations can filter to a specific PostNL account.
         # ``None`` until the device exists (i.e. the sensors are set up).
@@ -515,8 +527,10 @@ class PostNLCoordinator(DataUpdateCoordinator):
             _LOGGER.debug("Authenticating with PostNL API.")
             await auth.check_and_refresh_token()
 
-            self.graphq_api = PostNLGraphql(auth.access_token)
-            self.jouw_api = PostNLJouwAPI(auth.access_token)
+            if self.graphq_api is None or auth.access_token != self._api_token:
+                self._api_token = auth.access_token
+                self.graphq_api = PostNLGraphql(self._api_token)
+                self.jouw_api = PostNLJouwAPI(self._api_token)
 
             data: dict[str, list[dict]] = {
                 'receiver': [],
@@ -536,6 +550,20 @@ class PostNLCoordinator(DataUpdateCoordinator):
 
             data['receiver'] = sort_parcels_by_ts(data['receiver'], 'planned_from')
             data['sender'] = sort_parcels_by_ts(data['sender'], 'planned_from')
+
+            # Keep the fallback/history caches bounded to barcodes PostNL
+            # still reports; anything older can never be needed again.
+            current_barcodes = {
+                p.get('barcode') for p in data['receiver'] if p.get('barcode')
+            }
+            self._parcel_cache = {
+                k: v for k, v in self._parcel_cache.items() if k in current_barcodes
+            }
+            self._delivered_history_cache = {
+                k: v
+                for k, v in self._delivered_history_cache.items()
+                if k in current_barcodes
+            }
 
             active_receiver = [p for p in data['receiver'] if not p.get('delivered')]
             self._fire_change_events(active_receiver)
@@ -693,12 +721,17 @@ class PostNLCoordinator(DataUpdateCoordinator):
         The active path gets observations from the Track & Trace call it
         already makes, but delivered parcels normally skip that call. When the
         history option is on we make the extra call here so delivered parcels
-        get parity with DHL / DPD. A failure is non-fatal — history is a
-        nice-to-have, so we log and fall back to ``None`` rather than failing
-        the whole refresh.
+        get parity with DHL / DPD. A delivered parcel's history never changes,
+        so a successful fetch is cached per barcode — one call per parcel
+        ever, not one per poll. A failure is non-fatal — history is a
+        nice-to-have, so we log and fall back to ``None`` (uncached, so the
+        next poll retries) rather than failing the whole refresh.
         """
         if not self._include_history:
             return None
+        barcode = shipment.get('barcode')
+        if barcode and barcode in self._delivered_history_cache:
+            return self._delivered_history_cache[barcode]
         try:
             details = self.jouw_api.track_and_trace(shipment['key'])
         except requests.exceptions.RequestException as exception:
@@ -708,7 +741,10 @@ class PostNLCoordinator(DataUpdateCoordinator):
             )
             return None
         colli = details.get('colli', {}).get(shipment['barcode'], {})
-        return build_history(_extract_observations(colli)) if colli else None
+        history = build_history(_extract_observations(colli)) if colli else None
+        if barcode:
+            self._delivered_history_cache[barcode] = history
+        return history
 
     async def transform_shipment(self, shipment) -> dict:
         _LOGGER.debug('Updating %s', shipment.get('key'))
@@ -753,8 +789,27 @@ class PostNLCoordinator(DataUpdateCoordinator):
                 }, history=history)
 
             _LOGGER.debug("Fetching Track and Trace details for shipment %s.", shipment['key'])
-            track_and_trace_details = await self.hass.async_add_executor_job(self.jouw_api.track_and_trace,
-                                                                             shipment['key'])
+            try:
+                track_and_trace_details = await self.hass.async_add_executor_job(
+                    self.jouw_api.track_and_trace, shipment['key']
+                )
+            except requests.exceptions.RequestException as exception:
+                # One broken T&T call must not fail the whole refresh. Degrade
+                # per parcel: reuse the last successful transform when we have
+                # one, otherwise fall through with the GraphQL-only fields.
+                barcode = shipment.get('barcode')
+                cached = self._parcel_cache.get(barcode) if barcode else None
+                if cached is not None:
+                    _LOGGER.warning(
+                        "Track & Trace failed for shipment %s; reusing previous data: %s",
+                        shipment.get('key'), exception,
+                    )
+                    return cached
+                _LOGGER.warning(
+                    "Track & Trace failed for shipment %s; using shipment fields only: %s",
+                    shipment.get('key'), exception,
+                )
+                track_and_trace_details = {}
 
             if not track_and_trace_details.get('colli'):
                 _LOGGER.warning("No colli found for shipment %s.", shipment['key'])
@@ -803,7 +858,7 @@ class PostNLCoordinator(DataUpdateCoordinator):
                 planned_from = shipment.get('deliveryWindowFrom')
                 planned_to = shipment.get('deliveryWindowTo')
 
-            return normalize_parcel({
+            parcel = normalize_parcel({
                 "key": shipment.get('key'),
                 "barcode": shipment.get('barcode'),
                 "name": shipment.get('title'),
@@ -834,6 +889,19 @@ class PostNLCoordinator(DataUpdateCoordinator):
                 # canonical kg + cm + ``text`` shape at the top level.
                 "dimensions": native_dimensions,
             }, history=history)
+            barcode = shipment.get('barcode')
+            if barcode and colli:
+                # Only a transform backed by real T&T data is worth reusing
+                # as a fallback on a later transient failure.
+                self._parcel_cache[barcode] = parcel
+            return parcel
         except requests.exceptions.RequestException as exception:
+            # Safety net for requests errors outside the targeted T&T catch.
+            # Degrade to the last successful transform when we have one; only
+            # fail the refresh when there is nothing to show for this parcel.
             _LOGGER.error("Error fetching Track and Trace details for shipment %s: %s", shipment.get('key'), exception, exc_info=True)
+            barcode = shipment.get('barcode')
+            cached = self._parcel_cache.get(barcode) if barcode else None
+            if cached is not None:
+                return cached
             raise UpdateFailed("Unable to update PostNL data") from exception
