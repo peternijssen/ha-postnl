@@ -22,7 +22,7 @@
         }
       },
       "reauth_confirm": {
-        "title": "PostNL — opnieuw inloggen vereist",
+        "title": "Opnieuw inloggen bij PostNL",
         "description": "Je PostNL-sessie is verlopen. Voer je gegevens opnieuw in.",
         "data": {
           "username": "E-mailadres",
@@ -32,29 +32,62 @@
     },
     "error": {
       "invalid_auth": "Ongeldig e-mailadres of wachtwoord.",
-      "cannot_connect": "Kan geen verbinding maken met PostNL. Probeer het opnieuw."
+      "cannot_connect": "Kan PostNL niet bereiken. Controleer je netwerkverbinding."
     },
     "abort": {
-      "already_configured": "Dit account is al geconfigureerd.",
-      "reauth_successful": "Opnieuw inloggen geslaagd."
+      "already_configured": "Dit PostNL-account is al geconfigureerd.",
+      "reauth_successful": "Opnieuw inloggen geslaagd.",
+      "unique_id_mismatch": "Log opnieuw in met hetzelfde PostNL-account waarmee deze koppeling is ingesteld."
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "Bezorgde pakketten",
-        "data": {
-          "delivered_filter_type": "Filteren op",
-          "delivered_filter_amount": "Aantal"
-        },
-        "data_description": {
-          "delivered_filter_type": "Toon bezorgde pakketten van de afgelopen X dagen, of beperk tot de X meest recente.",
-          "delivered_filter_amount": "Aantal dagen of pakketten om weer te geven."
+        "title": "PostNL-opties",
+        "sections": {
+          "delivered": {
+            "name": "Bezorgde pakketten",
+            "data": {
+              "delivered_filter_type": "Filteren op",
+              "delivered_filter_amount": "Aantal"
+            },
+            "data_description": {
+              "delivered_filter_type": "Toon bezorgde pakketten van de afgelopen X dagen, of beperk tot de X meest recente.",
+              "delivered_filter_amount": "Aantal dagen of pakketten om weer te geven."
+            }
+          },
+          "history": {
+            "name": "Pakketgeschiedenis",
+            "data": {
+              "include_history": "Statusgeschiedenis toevoegen"
+            },
+            "data_description": {
+              "include_history": "Voegt een geschiedenis-attribuut per pakket toe met elke statusupdate (tijdstip, status, originele tekst). Standaard uit."
+            }
+          },
+          "polling": {
+            "name": "Verversen",
+            "data": {
+              "refresh_interval": "Ververs elke"
+            },
+            "data_description": {
+              "refresh_interval": "Hoe vaak de integratie PostNL controleert op pakketupdates. Een langzamer interval is vriendelijker voor PostNL; de standaard van 30 minuten is ruim voldoende voor de meeste pakketten."
+            }
+          }
         }
       }
     }
   },
   "selector": {
+    "refresh_interval": {
+      "options": {
+        "15": "15 minuten",
+        "30": "30 minuten",
+        "60": "60 minuten",
+        "120": "120 minuten",
+        "240": "240 minuten"
+      }
+    },
     "delivered_filter_type": {
       "options": {
         "days": "Dagen",
@@ -62,7 +95,25 @@
       }
     }
   },
+  "device_automation": {
+    "trigger_type": {
+      "parcel_registered": "Een pakket is geregistreerd",
+      "parcel_status_changed": "De status van een pakket is gewijzigd",
+      "parcel_delivery_time_changed": "De verwachte bezorgtijd van een pakket is gewijzigd",
+      "letter_announced": "Een brief is aangekondigd"
+    }
+  },
   "entity": {
+    "button": {
+      "refresh": {
+        "name": "Verversen"
+      }
+    },
+    "calendar": {
+      "deliveries": {
+        "name": "Bezorgingen"
+      }
+    },
     "sensor": {
       "incoming_parcels": {
         "name": "Inkomende pakketten",
@@ -95,7 +146,7 @@
         "unit_of_measurement": "brieven"
       },
       "last_update": {
-        "name": "Laatste update"
+        "name": "Laatste succesvolle update"
       }
     },
     "image": {
