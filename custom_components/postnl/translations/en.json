@@ -22,7 +22,7 @@
         }
       },
       "reauth_confirm": {
-        "title": "Re-authenticate PostNL",
+        "title": "PostNL — re-authentication required",
         "description": "Your PostNL session has expired. Please enter your credentials again.",
         "data": {
           "username": "Email address",
@@ -31,63 +31,30 @@
       }
     },
     "error": {
-      "invalid_auth": "Invalid email or password.",
-      "cannot_connect": "Unable to reach PostNL. Check your network."
+      "invalid_auth": "Invalid email address or password.",
+      "cannot_connect": "Unable to connect to PostNL. Please try again."
     },
     "abort": {
-      "already_configured": "This PostNL account is already configured.",
-      "reauth_successful": "Re-authentication successful.",
-      "unique_id_mismatch": "Re-authenticate with the same PostNL account this entry was set up with."
+      "already_configured": "This account is already configured.",
+      "reauth_successful": "Re-authentication was successful."
     }
   },
   "options": {
     "step": {
       "init": {
-        "title": "PostNL options",
-        "sections": {
-          "delivered": {
-            "name": "Delivered parcels",
-            "data": {
-              "delivered_filter_type": "Filter by",
-              "delivered_filter_amount": "Amount"
-            },
-            "data_description": {
-              "delivered_filter_type": "Show delivered parcels from the last X days, or limit to the X most recent.",
-              "delivered_filter_amount": "Number of days or parcels to show."
-            }
-          },
-          "history": {
-            "name": "Parcel history",
-            "data": {
-              "include_history": "Include status history"
-            },
-            "data_description": {
-              "include_history": "Add a per-parcel history attribute listing each status update (timestamp, status, original text). Off by default."
-            }
-          },
-          "polling": {
-            "name": "Polling",
-            "data": {
-              "refresh_interval": "Refresh every"
-            },
-            "data_description": {
-              "refresh_interval": "How often the integration checks PostNL for parcel updates. A slower interval is gentler on PostNL's API; the default of 30 minutes is plenty for most parcels."
-            }
-          }
+        "title": "Delivered parcels",
+        "data": {
+          "delivered_filter_type": "Filter by",
+          "delivered_filter_amount": "Amount"
+        },
+        "data_description": {
+          "delivered_filter_type": "Show delivered parcels from the last X days, or limit to the X most recent.",
+          "delivered_filter_amount": "Number of days or parcels to show."
         }
       }
     }
   },
   "selector": {
-    "refresh_interval": {
-      "options": {
-        "15": "15 minutes",
-        "30": "30 minutes",
-        "60": "60 minutes",
-        "120": "120 minutes",
-        "240": "240 minutes"
-      }
-    },
     "delivered_filter_type": {
       "options": {
         "days": "Days",
@@ -95,25 +62,7 @@
       }
     }
   },
-  "device_automation": {
-    "trigger_type": {
-      "parcel_registered": "A parcel was registered",
-      "parcel_status_changed": "A parcel's status changed",
-      "parcel_delivery_time_changed": "A parcel's expected delivery time changed",
-      "letter_announced": "A letter was announced"
-    }
-  },
   "entity": {
-    "button": {
-      "refresh": {
-        "name": "Refresh"
-      }
-    },
-    "calendar": {
-      "deliveries": {
-        "name": "Deliveries"
-      }
-    },
     "sensor": {
       "incoming_parcels": {
         "name": "Incoming parcels",
@@ -130,6 +79,10 @@
         "name": "Delivered parcels",
         "unit_of_measurement": "parcels"
       },
+      "outgoing_delivered_parcels": {
+        "name": "Delivered outgoing parcels",
+        "unit_of_measurement": "parcels"
+      },
       "next_delivery": {
         "name": "Next delivery"
       },
@@ -142,7 +95,7 @@
         "unit_of_measurement": "letters"
       },
       "last_update": {
-        "name": "Last successful update"
+        "name": "Last update"
       }
     },
     "image": {

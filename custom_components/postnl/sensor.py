@@ -48,6 +48,7 @@ async def async_setup_entry(
         f"{account_id}_en_route_to_service_point",
         f"{account_id}_outgoing_parcels",
         f"{account_id}_delivered_parcels",
+        f"{account_id}_outgoing_delivered_parcels",
         f"{account_id}_letters",
         f"{account_id}_last_update",
     }
@@ -75,6 +76,7 @@ async def async_setup_entry(
         PostNLEnRouteToServicePointSensor(coordinator=coordinator, userinfo=userinfo),
         PostNLOutgoingParcelsSensor(coordinator=coordinator, userinfo=userinfo),
         PostNLDeliveredParcelsSensor(coordinator=coordinator, userinfo=userinfo),
+        PostNLDeliveredSenderSensor(coordinator=coordinator, userinfo=userinfo),
         PostNLLettersSensor(coordinator=coordinator, userinfo=userinfo),
         PostNLLastUpdateSensor(coordinator=coordinator, userinfo=userinfo),
     ]
@@ -108,11 +110,7 @@ class PostNLIncomingParcelsSensor(CoordinatorEntity[PostNLCoordinator], SensorEn
 
     Spawns a per-parcel :class:`PostNLParcelSensor` whenever a new barcode
     appears, and removes the per-parcel sensor from the entity registry
-    when its barcode drops out of the coordinator data. Doing the removal
-    here (synchronously, via the registry) instead of having the per-parcel
-    sensor self-remove from inside its own ``_handle_coordinator_update``
-    avoids the race where ``async_remove(force_remove=True)`` competes with
-    the coordinator-listener cleanup and leaves a ghost entity behind.
+    when its barcode drops out of the coordinator data.
     """
 
     _attr_has_entity_name = True
@@ -209,7 +207,6 @@ class PostNLParcelSensor(CoordinatorEntity[PostNLCoordinator], SensorEntity):
     def extra_state_attributes(self) -> dict[str, Any]:
         parcel = self._get_parcel()
         return dict(parcel) if parcel else {}
-
 
 
 class PostNLNextDeliverySensor(CoordinatorEntity[PostNLCoordinator], SensorEntity):
@@ -356,6 +353,41 @@ class PostNLDeliveredParcelsSensor(CoordinatorEntity[PostNLCoordinator], SensorE
         return {"parcels": self._parcels}
 
 
+class PostNLDeliveredSenderSensor(CoordinatorEntity[PostNLCoordinator], SensorEntity):
+    """Sensor reporting recently delivered outgoing PostNL parcels."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "outgoing_delivered_parcels"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_attribution = "Data provided by PostNL"
+    _unrecorded_attributes = frozenset({"parcels"})
+
+    def __init__(
+        self,
+        coordinator: PostNLCoordinator,
+        userinfo: dict[str, Any],
+    ) -> None:
+        super().__init__(coordinator)
+        account_id: str = userinfo.get("account_id", "")
+        self._attr_unique_id = f"{account_id}_outgoing_delivered_parcels"
+        self._attr_device_info = _build_device_info(userinfo)
+        # Pin the entity_id to the English key so it stays language-independent
+        # regardless of the HA UI language at first-creation time.
+        self.entity_id = f"sensor.{account_id}_postnl_outgoing_delivered_parcels"
+
+    @property
+    def _parcels(self) -> list[dict]:
+        return self.coordinator.delivered_sender or []
+
+    @property
+    def native_value(self) -> int:
+        return len(self._parcels)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {"parcels": self._parcels}
+
+
 class PostNLLettersSensor(CoordinatorEntity[PostNLCoordinator], SensorEntity):
     """Sensor reporting letters announced by PostNL's MyMail service."""
 
@@ -392,12 +424,7 @@ class PostNLLettersSensor(CoordinatorEntity[PostNLCoordinator], SensorEntity):
 
 
 class PostNLLastUpdateSensor(CoordinatorEntity[PostNLCoordinator], SensorEntity):
-    """Diagnostic sensor reporting when PostNL was last polled successfully.
-
-    Updates on every successful coordinator refresh, even when no parcel
-    value changes — so users can alert on a silently-stale integration
-    (e.g. expired auth) that the count sensors would not reveal.
-    """
+    """Diagnostic sensor reporting when PostNL was last polled successfully."""
 
     _attr_has_entity_name = True
     _attr_translation_key = "last_update"
@@ -417,5 +444,4 @@ class PostNLLastUpdateSensor(CoordinatorEntity[PostNLCoordinator], SensorEntity)
 
     @property
     def native_value(self) -> datetime | None:
-        """Return the timestamp of the last successful poll."""
         return self.coordinator.last_success_time
