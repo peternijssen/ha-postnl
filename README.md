@@ -1,5 +1,9 @@
 # PostNL Parcel Tracker
 
+[![Release](https://img.shields.io/github/v/release/peternijssen/ha-postnl.svg)](https://github.com/peternijssen/ha-postnl/releases)
+[![HACS](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
+[![Downloads](https://img.shields.io/github/downloads/peternijssen/ha-postnl/total.svg)](https://github.com/peternijssen/ha-postnl/releases)
+
 A custom Home Assistant integration that tracks your PostNL shipments
 and announced MyMail letters.
 
