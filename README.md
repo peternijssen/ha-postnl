@@ -2,6 +2,9 @@
 
 [![Release](https://img.shields.io/github/v/release/peternijssen/ha-postnl.svg)](https://github.com/peternijssen/ha-postnl/releases)
 [![HACS](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
+
+> 💬 Questions or feedback? Join the discussion on the [Home Assistant community](https://community.home-assistant.io/t/packages-postnl-dhl-nl-dpd-and-gls-parcel-integration/112433/).
+
 A custom Home Assistant integration that tracks your PostNL shipments
 and announced MyMail letters.
 
