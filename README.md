@@ -43,6 +43,7 @@ and announced MyMail letters.
 
 - Home Assistant 2024.7 or newer
 - A [PostNL](https://jouw.postnl.nl) account (the credentials you use on jouw.postnl.nl / the PostNL mobile app)
+  - Both **Netherlands and Belgium** PostNL accounts are supported — they share the same backend, so your parcels come through either way. (MyMail letter scanning is a Netherlands-only feature and stays empty for Belgian mail.)
 
 ## Installation
 

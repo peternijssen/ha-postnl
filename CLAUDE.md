@@ -336,6 +336,20 @@ re-propose these as improvements:
   uses ordered substring patterns rather than a dict lookup. More
   specific patterns must come before broader ones (e.g. "wordt
   vandaag bezorgd" before "bezorgd").
+- **`jouw.postnl.nl` is the universal backend — never route to
+  `jouw.postnl.be`.** Verified 2026-07-07 with a live NL token: the
+  GraphQL `trackedShipments` inbox is **account-scoped, not
+  domain-scoped** — `jouw.postnl.be/account/api/graphql` returns a
+  byte-identical parcel list to `.nl` (same account, same backend, no
+  `country`/`market` claim in the JWT). The `.be` host is strictly
+  worse: MyMail `.../MyMail/letter` returns **HTTP 400** there (letter
+  scanning is a Netherlands-only mail feature) while `.nl` returns 200.
+  So a NL-vs-BE country dropdown would be a **no-op** for parcels and
+  would break letters — do not add one. Belgian PostNL accounts are
+  already fully covered by the existing `.nl` calls (documented in the
+  README's Requirements). This is why "add postnl.be support" needs no
+  code; the suite's real Belgium gap is **bpost**, a genuinely separate
+  carrier.
 
 ## Fork / upstream relationship
 
