@@ -588,7 +588,7 @@ class PostNLCoordinator(DataUpdateCoordinator):
 
             delivered_sender = [p for p in data['sender'] if p.get('delivered')]
             self.delivered_sender = sort_parcels_by_ts(
-                delivered_sender,
+                self._apply_delivered_filter(delivered_sender),
                 'delivered_at',
                 descending=True,
             )

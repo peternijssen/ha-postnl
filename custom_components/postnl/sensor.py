@@ -48,7 +48,7 @@ async def async_setup_entry(
         f"{account_id}_en_route_to_service_point",
         f"{account_id}_outgoing_parcels",
         f"{account_id}_delivered_parcels",
-		f"{account_id}_outgoing_delivered_parcels",
+        f"{account_id}_outgoing_delivered_parcels",
         f"{account_id}_letters",
         f"{account_id}_last_update",
     }
@@ -76,7 +76,7 @@ async def async_setup_entry(
         PostNLEnRouteToServicePointSensor(coordinator=coordinator, userinfo=userinfo),
         PostNLOutgoingParcelsSensor(coordinator=coordinator, userinfo=userinfo),
         PostNLDeliveredParcelsSensor(coordinator=coordinator, userinfo=userinfo),
-		PostNLDeliveredSenderSensor(coordinator=coordinator, userinfo=userinfo),
+        PostNLOutgoingDeliveredParcelsSensor(coordinator=coordinator, userinfo=userinfo),
         PostNLLettersSensor(coordinator=coordinator, userinfo=userinfo),
         PostNLLastUpdateSensor(coordinator=coordinator, userinfo=userinfo),
     ]
@@ -358,7 +358,7 @@ class PostNLDeliveredParcelsSensor(CoordinatorEntity[PostNLCoordinator], SensorE
         return {"parcels": self._parcels}
 
 
-class PostNLDeliveredSenderSensor(CoordinatorEntity[PostNLCoordinator], SensorEntity):
+class PostNLOutgoingDeliveredParcelsSensor(CoordinatorEntity[PostNLCoordinator], SensorEntity):
     """Sensor reporting recently delivered outgoing PostNL parcels."""
 
     _attr_has_entity_name = True
@@ -376,9 +376,6 @@ class PostNLDeliveredSenderSensor(CoordinatorEntity[PostNLCoordinator], SensorEn
         account_id: str = userinfo.get("account_id", "")
         self._attr_unique_id = f"{account_id}_outgoing_delivered_parcels"
         self._attr_device_info = _build_device_info(userinfo)
-        # Pin the entity_id to the English key so it stays language-independent
-        # regardless of the HA UI language at first-creation time.
-        self.entity_id = f"sensor.{account_id}_postnl_outgoing_delivered_parcels"
 
     @property
     def _parcels(self) -> list[dict]:

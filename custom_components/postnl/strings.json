@@ -130,6 +130,10 @@
         "name": "Delivered parcels",
         "unit_of_measurement": "parcels"
       },
+      "outgoing_delivered_parcels": {
+        "name": "Delivered outgoing parcels",
+        "unit_of_measurement": "parcels"
+      },
       "next_delivery": {
         "name": "Next delivery"
       },

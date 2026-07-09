@@ -23,6 +23,9 @@
       "delivered_parcels": {
         "default": "mdi:package-variant"
       },
+      "outgoing_delivered_parcels": {
+        "default": "mdi:package-variant"
+      },
       "next_delivery": {
         "default": "mdi:clock-fast"
       },

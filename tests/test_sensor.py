@@ -15,6 +15,7 @@ from custom_components.postnl.sensor import (
     PostNLIncomingParcelsSensor,
     PostNLLettersSensor,
     PostNLNextDeliverySensor,
+    PostNLOutgoingDeliveredParcelsSensor,
     PostNLOutgoingParcelsSensor,
     PostNLParcelSensor,
 )
@@ -27,11 +28,13 @@ def _coordinator(
     receiver: list[dict] | None = None,
     sender: list[dict] | None = None,
     delivered_receiver: list[dict] | None = None,
+    delivered_sender: list[dict] | None = None,
     letters: list[dict] | None = None,
 ) -> MagicMock:
     coordinator = MagicMock()
     coordinator.data = {"receiver": receiver or [], "sender": sender or []}
     coordinator.delivered_receiver = delivered_receiver or []
+    coordinator.delivered_sender = delivered_sender or []
     coordinator.letters = letters or []
     coordinator.last_update_success = True
     return coordinator
@@ -217,6 +220,30 @@ def test_delivered_sensor_reads_from_coordinator_delivered_receiver():
     assert parcels[0]["barcode"] == "D1"
     assert parcels[0]["sender"] == "Sender"
     assert parcels[0]["delivered_at"] == "2026-06-15T10:00:00Z"
+
+
+def test_outgoing_delivered_sensor_reads_from_coordinator_delivered_sender():
+    delivered = [_parcel(
+        barcode="OD1",
+        delivered=True,
+        status=ParcelStatus.DELIVERED,
+        raw_status="Pakket is bezorgd",
+        delivered_at="2026-06-15T10:00:00Z",
+    )]
+    sensor = PostNLOutgoingDeliveredParcelsSensor(
+        _coordinator(delivered_sender=delivered), _USERINFO
+    )
+    assert sensor.native_value == 1
+    assert sensor.unique_id == "abc-123_outgoing_delivered_parcels"
+    parcels = sensor.extra_state_attributes["parcels"]
+    assert parcels[0]["barcode"] == "OD1"
+    assert parcels[0]["delivered_at"] == "2026-06-15T10:00:00Z"
+
+
+def test_outgoing_delivered_sensor_empty_when_no_delivered_sender():
+    sensor = PostNLOutgoingDeliveredParcelsSensor(_coordinator(), _USERINFO)
+    assert sensor.native_value == 0
+    assert sensor.extra_state_attributes["parcels"] == []
 
 
 # ---------------------------------------------------------------------------
