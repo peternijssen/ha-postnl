@@ -463,6 +463,7 @@ class PostNLCoordinator(DataUpdateCoordinator):
             update_interval=_refresh_interval(entry),
         )
         self.delivered_receiver: list[dict] = []
+        self.delivered_sender: list[dict] = []
         self.letters: list[dict] = []
         # API clients are reused across polls (each PostNLJouwAPI owns a
         # requests.Session with a connection pool); they are only rebuilt
@@ -581,6 +582,13 @@ class PostNLCoordinator(DataUpdateCoordinator):
             delivered_receiver = [p for p in data['receiver'] if p.get('delivered')]
             self.delivered_receiver = sort_parcels_by_ts(
                 self._apply_delivered_filter(delivered_receiver),
+                'delivered_at',
+                descending=True,
+            )
+
+            delivered_sender = [p for p in data['sender'] if p.get('delivered')]
+            self.delivered_sender = sort_parcels_by_ts(
+                self._apply_delivered_filter(delivered_sender),
                 'delivered_at',
                 descending=True,
             )

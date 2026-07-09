@@ -130,6 +130,10 @@
         "name": "Bezorgde pakketten",
         "unit_of_measurement": "pakketten"
       },
+      "outgoing_delivered_parcels": {
+        "name": "Uitgaande bezorgde pakketten",
+        "unit_of_measurement": "pakketten"
+      },
       "next_delivery": {
         "name": "Volgende bezorging"
       },

@@ -48,6 +48,7 @@ async def async_setup_entry(
         f"{account_id}_en_route_to_service_point",
         f"{account_id}_outgoing_parcels",
         f"{account_id}_delivered_parcels",
+        f"{account_id}_outgoing_delivered_parcels",
         f"{account_id}_letters",
         f"{account_id}_last_update",
     }
@@ -75,6 +76,7 @@ async def async_setup_entry(
         PostNLEnRouteToServicePointSensor(coordinator=coordinator, userinfo=userinfo),
         PostNLOutgoingParcelsSensor(coordinator=coordinator, userinfo=userinfo),
         PostNLDeliveredParcelsSensor(coordinator=coordinator, userinfo=userinfo),
+        PostNLOutgoingDeliveredParcelsSensor(coordinator=coordinator, userinfo=userinfo),
         PostNLLettersSensor(coordinator=coordinator, userinfo=userinfo),
         PostNLLastUpdateSensor(coordinator=coordinator, userinfo=userinfo),
     ]
@@ -346,6 +348,38 @@ class PostNLDeliveredParcelsSensor(CoordinatorEntity[PostNLCoordinator], SensorE
     @property
     def _parcels(self) -> list[dict]:
         return self.coordinator.delivered_receiver or []
+
+    @property
+    def native_value(self) -> int:
+        return len(self._parcels)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {"parcels": self._parcels}
+
+
+class PostNLOutgoingDeliveredParcelsSensor(CoordinatorEntity[PostNLCoordinator], SensorEntity):
+    """Sensor reporting recently delivered outgoing PostNL parcels."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "outgoing_delivered_parcels"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_attribution = "Data provided by PostNL"
+    _unrecorded_attributes = frozenset({"parcels"})
+
+    def __init__(
+        self,
+        coordinator: PostNLCoordinator,
+        userinfo: dict[str, Any],
+    ) -> None:
+        super().__init__(coordinator)
+        account_id: str = userinfo.get("account_id", "")
+        self._attr_unique_id = f"{account_id}_outgoing_delivered_parcels"
+        self._attr_device_info = _build_device_info(userinfo)
+
+    @property
+    def _parcels(self) -> list[dict]:
+        return self.coordinator.delivered_sender or []
 
     @property
     def native_value(self) -> int:

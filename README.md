@@ -119,8 +119,9 @@ friendly-name pattern; their entity_ids carry the same account suffix:
 | `PostNL (account) Parcel <barcode>` | Canonical status of a single incoming shipment |
 | `PostNL (account) Next delivery` | Earliest expected delivery datetime |
 | `PostNL (account) En route to PostNL Point` | Active incoming parcels destined for a PostNL Point pickup location |
-| `PostNL (account) Delivered parcels` | Recently delivered parcels (configurable window) |
+| `PostNL (account) Delivered parcels` | Recently delivered incoming parcels (configurable window) |
 | `PostNL (account) Outgoing parcels` | Number of active outgoing parcels |
+| `PostNL (account) Outgoing delivered parcels` | Recently delivered outgoing parcels (same configurable window) |
 | `PostNL (account) Letters` | Letters announced by PostNL's MyMail service over the last ~2 weeks; `unread` count and `letters` list on attributes |
 | `PostNL (account) Letter <title>` (image entity) | Scanned photo of a single announced letter, fetched with your token and served through Home Assistant. Attributes mirror the sensor's letter dict: `id`, `title`, `date`, `unread` |
 
