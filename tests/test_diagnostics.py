@@ -15,6 +15,7 @@ def _entry(
     receiver: list[dict] | None = None,
     sender: list[dict] | None = None,
     delivered_receiver: list[dict] | None = None,
+    delivered_sender: list[dict] | None = None,
     letters: list[dict] | None = None,
     last_update_success: bool = True,
     entry_data: dict | None = None,
@@ -22,6 +23,7 @@ def _entry(
     coordinator = MagicMock()
     coordinator.data = {"receiver": receiver or [], "sender": sender or []}
     coordinator.delivered_receiver = delivered_receiver or []
+    coordinator.delivered_sender = delivered_sender or []
     coordinator.letters = letters or []
     coordinator.last_update_success = last_update_success
 
@@ -78,6 +80,7 @@ async def test_diagnostics_reports_counts_and_options():
         receiver=[{"barcode": "A"}, {"barcode": "B"}],
         sender=[{"barcode": "C"}],
         delivered_receiver=[{"barcode": "D"}],
+        delivered_sender=[{"barcode": "E"}],
         letters=[{"id": "L1"}, {"id": "L2"}, {"id": "L3"}],
         last_update_success=False,
     )
@@ -86,8 +89,10 @@ async def test_diagnostics_reports_counts_and_options():
         "receiver": 2,
         "sender": 1,
         "delivered_receiver": 1,
+        "delivered_sender": 1,
         "letters": 3,
     }
+    assert result["delivered_sender"][0]["barcode"] == "**REDACTED**"
     assert result["last_update_success"] is False
     assert result["entry_options"]["delivered_filter_type"] == "days"
 

@@ -46,6 +46,7 @@ async def async_get_config_entry_diagnostics(
             "receiver": len((coordinator.data or {}).get("receiver", [])),
             "sender": len((coordinator.data or {}).get("sender", [])),
             "delivered_receiver": len(coordinator.delivered_receiver or []),
+            "delivered_sender": len(coordinator.delivered_sender or []),
             "letters": len(coordinator.letters or []),
         },
         "receiver": async_redact_data(
@@ -56,6 +57,9 @@ async def async_get_config_entry_diagnostics(
         ),
         "delivered_receiver": async_redact_data(
             coordinator.delivered_receiver or [], TO_REDACT
+        ),
+        "delivered_sender": async_redact_data(
+            coordinator.delivered_sender or [], TO_REDACT
         ),
         "letters": async_redact_data(coordinator.letters or [], TO_REDACT),
     }
