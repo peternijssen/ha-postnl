@@ -34,8 +34,10 @@ async def async_setup_entry(
     userinfo: dict[str, Any] = data.userinfo
     account_id: str = userinfo.get("account_id", "")
 
+    # The coordinator is already refreshed by __init__.py before platforms are
+    # forwarded, so ConfigEntryNotReady is raised from the entry setup rather
+    # than (too late) from this forwarded platform.
     coordinator = data.coordinator
-    await coordinator.async_config_entry_first_refresh()
 
     receiver_parcels: list[dict] = _active_receiver(coordinator)
     current_barcodes: set[str] = {p["barcode"] for p in receiver_parcels if p.get("barcode")}

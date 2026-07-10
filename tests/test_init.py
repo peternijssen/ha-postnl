@@ -132,6 +132,35 @@ async def test_setup_entry_retries_on_userinfo_network_failure(hass):
     assert entry.state is ConfigEntryState.SETUP_RETRY
 
 
+async def test_setup_entry_retries_when_first_refresh_fails(hass):
+    """Auth and userinfo succeed but the first data fetch fails.
+
+    The first refresh runs in __init__.py before platforms are forwarded, so a
+    failure raises ConfigEntryNotReady from the entry setup (SETUP_RETRY) rather
+    than — too late — from a forwarded platform (previously both sensor and
+    image each triggered their own first refresh).
+    """
+    entry = _add_entry(hass)
+    with (
+        patch(
+            "custom_components.postnl.AsyncConfigEntryAuth.check_and_refresh_token",
+            new=AsyncMock(return_value="tok"),
+        ),
+        patch(
+            "custom_components.postnl.PostNLLoginAPI.userinfo",
+            new=MagicMock(return_value=_USERINFO),
+        ),
+        patch(
+            "custom_components.postnl.coordinator.PostNLGraphql.shipments",
+            new=MagicMock(side_effect=requests.exceptions.RequestException("boom")),
+        ),
+    ):
+        assert not await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    assert entry.state is ConfigEntryState.SETUP_RETRY
+
+
 async def test_unload_entry_succeeds(hass):
     entry = _add_entry(hass)
     with (

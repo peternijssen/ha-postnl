@@ -324,12 +324,19 @@ re-propose these as improvements:
   them directly. The `PostNLLetterImage` entity fetches the bytes via
   `PostNLJouwAPI.image()` server-side and serves them through HA's
   authenticated image proxy. Do not change to a redirect-based scheme.
-- **First-refresh ordering matters for image platform**: image
-  entities added from a coordinator-listener callback after platform
-  setup register in the entity registry but never make it into the
-  state machine. `image.py` works around this by awaiting
-  `async_config_entry_first_refresh()` and adding the initial batch
-  during setup; the listener only handles later changes.
+- **First refresh runs in `__init__.py`, before `async_forward_entry_setups`**:
+  `async_setup_entry` sets `entry.runtime_data` (the coordinator reads
+  `runtime_data.auth` in `_async_update_data`, so it must exist first)
+  and then awaits `coordinator.async_config_entry_first_refresh()` before
+  forwarding. Raising `ConfigEntryNotReady` from a *forwarded* platform is
+  too late for HA to catch — it logs a warning and half-sets-up the entry.
+  This also means a single first refresh instead of one per platform
+  (`sensor.py` **and** `image.py` each used to call it). The image platform
+  still relies on `coordinator.letters` being populated before it adds its
+  initial batch of entities (a coordinator-listener callback after setup
+  registers image entities that never reach the state machine); that data
+  is now guaranteed present by the `__init__` first refresh. Do not move
+  the first refresh back into a platform.
 - **PostNL status is a Dutch human string, not an enum**:
   `colli.statusPhase.message` is whatever PostNL's UI happens to
   show — it changes without notice. `map_parcel_status` therefore

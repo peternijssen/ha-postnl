@@ -58,7 +58,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: PostNLConfigEntry) -> bo
         raise ConfigEntryNotReady("Error in retrieving user information from PostNL.")
 
     coordinator = PostNLCoordinator(hass, entry)
+    # runtime_data must be set before the first refresh: the coordinator reads
+    # entry.runtime_data.auth inside _async_update_data.
     entry.runtime_data = PostNLData(auth=auth, coordinator=coordinator, userinfo=userinfo)
+
+    # Fetch initial data here, before forwarding to platforms. Raising
+    # ConfigEntryNotReady from a forwarded platform is too late for HA to catch
+    # cleanly (it logs a warning and half-sets-up the entry); doing the first
+    # refresh here lets a transient failure fail the whole entry so HA retries
+    # it with backoff. It also means a single refresh instead of one per
+    # platform (sensor + image previously each triggered their own).
+    await coordinator.async_config_entry_first_refresh()
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True

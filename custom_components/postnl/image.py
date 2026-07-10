@@ -45,10 +45,9 @@ async def async_setup_entry(
     account_id: str = userinfo.get("account_id", "")
     coordinator = data.coordinator
 
-    # Ensure coordinator.letters is populated before we try to add entities —
-    # adding image entities from a post-setup listener callback leaves them
-    # registered but missing from the state machine.
-    await coordinator.async_config_entry_first_refresh()
+    # coordinator.letters is already populated: __init__.py performs the first
+    # refresh before platforms are forwarded, so ConfigEntryNotReady is raised
+    # from the entry setup rather than (too late) from this forwarded platform.
 
     unique_prefix = f"{account_id}_letter_image_"
     known_ids: set[str] = set()
