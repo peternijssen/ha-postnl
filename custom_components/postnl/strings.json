@@ -100,6 +100,8 @@
       "parcel_registered": "A parcel was registered",
       "parcel_status_changed": "A parcel's status changed",
       "parcel_delivery_time_changed": "A parcel's expected delivery time changed",
+      "outgoing_parcel_status_changed": "An outgoing parcel's status changed",
+      "outgoing_parcel_delivered": "An outgoing parcel was delivered",
       "letter_announced": "A letter was announced"
     }
   },

@@ -187,6 +187,8 @@ polling per-parcel sensors.
 | `postnl_parcel_registered` | A new barcode appears in the active list | The full parcel dict (see the table above) |
 | `postnl_parcel_status_changed` | A known barcode's `status` value changes | Same payload plus `old_status` and `new_status` |
 | `postnl_parcel_delivery_time_changed` | A known barcode's expected delivery time changes to a new value | Same payload plus `old_planned_from`, `new_planned_from`, `old_planned_to`, `new_planned_to` |
+| `postnl_outgoing_parcel_status_changed` | A known **outgoing** parcel (something you sent, or a return) changes status, except the final hop to delivered | Same payload plus `old_status` and `new_status` |
+| `postnl_outgoing_parcel_delivered` | An outgoing parcel reaches the recipient | The full parcel dict |
 | `postnl_letter_announced` | A new letter appears in the MyMail feed | The letter dict (`id`, `title`, `date`, `unread`, `image_url`) plus `carrier: "PostNL"` |
 
 Every payload also carries a `device_id` identifying the PostNL account

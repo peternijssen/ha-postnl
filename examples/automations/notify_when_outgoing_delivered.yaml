@@ -1,0 +1,22 @@
+# Notify when an outgoing parcel (something you sent, e.g. a webshop
+# return) reaches the recipient, so you can watch for the refund. Fires
+# once per parcel on the hop to delivered.
+
+alias: "PostNL: outgoing parcel delivered"
+description: Notify when a PostNL outgoing/return parcel is delivered.
+mode: queued
+max: 10
+
+triggers:
+  - trigger: event
+    event_type: postnl_outgoing_parcel_delivered
+
+actions:
+  - action: notify.mobile_app
+    data:
+      title: "Verzending bezorgd"
+      message: >-
+        {{ trigger.event.data.receiver or trigger.event.data.barcode }} is
+        aangekomen.
+      data:
+        clickAction: "{{ trigger.event.data.url }}"

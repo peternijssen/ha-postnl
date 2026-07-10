@@ -483,6 +483,12 @@ class PostNLCoordinator(DataUpdateCoordinator):
         self._known_delivery_times: (
             dict[str, tuple[str | None, str | None]] | None
         ) = None
+        # barcode -> last seen ParcelStatus for *outgoing* (sender) parcels —
+        # own sent shipments and returns both land in senderShipments. Tracked
+        # over the full sender list so a status change or a
+        # transition-to-delivered fires an outgoing event. ``None`` on the
+        # first refresh for the same suppression reason as ``_known_state``.
+        self._known_outgoing_state: dict[str, ParcelStatus] | None = None
         # Letter ids seen on the previous successful letters fetch. ``None``
         # on the first refresh for the same reason — we do not want to fire
         # ``postnl_letter_announced`` for every letter that already existed.
@@ -589,6 +595,15 @@ class PostNLCoordinator(DataUpdateCoordinator):
                 descending=True,
             )
 
+            # Outgoing events over the full sender list (active + delivered),
+            # so a hop from in-transit to delivered is visible in one set.
+            self._fire_outgoing_change_events(data['sender'])
+            self._known_outgoing_state = {
+                p["barcode"]: p["status"]
+                for p in data['sender']
+                if p.get("barcode")
+            }
+
             delivered_sender = [p for p in data['sender'] if p.get('delivered')]
             self.delivered_sender = sort_parcels_by_ts(
                 self._apply_delivered_filter(delivered_sender),
@@ -681,6 +696,51 @@ class PostNLCoordinator(DataUpdateCoordinator):
                         "new_planned_from": new_from,
                         "old_planned_to": old_to,
                         "new_planned_to": new_to,
+                    },
+                )
+
+    def _fire_outgoing_change_events(self, parcels: list[dict]) -> None:
+        """Fire status/delivered events for outgoing (sender) parcels.
+
+        Silent on the very first refresh (``_known_outgoing_state is None``),
+        matching ``_fire_change_events``. From the second refresh onward, every
+        outgoing parcel whose normalised status transitions **to**
+        ``DELIVERED`` yields one ``postnl_outgoing_parcel_delivered`` event, and
+        every other status change yields one
+        ``postnl_outgoing_parcel_status_changed`` event. ``delivered`` takes
+        precedence over ``status_changed`` for that final transition, so the
+        terminal hop fires exactly one (dedicated) event, not both. A parcel
+        that is already delivered the first time it is seen never fires (its
+        status did not change). There is no outgoing ``registered`` or
+        ``delivery_time_changed`` event — those are intentionally out of scope.
+        """
+        if self._known_outgoing_state is None:
+            return
+
+        device_id = self._device_id()
+
+        for parcel in parcels:
+            barcode = parcel.get("barcode")
+            if not barcode or barcode not in self._known_outgoing_state:
+                continue
+            old_status = self._known_outgoing_state[barcode]
+            new_status = parcel["status"]
+            if new_status == old_status:
+                continue
+
+            if new_status == ParcelStatus.DELIVERED:
+                self.hass.bus.async_fire(
+                    f"{DOMAIN}_outgoing_parcel_delivered",
+                    {**parcel, "device_id": device_id},
+                )
+            else:
+                self.hass.bus.async_fire(
+                    f"{DOMAIN}_outgoing_parcel_status_changed",
+                    {
+                        **parcel,
+                        "device_id": device_id,
+                        "old_status": old_status,
+                        "new_status": new_status,
                     },
                 )
 

@@ -100,6 +100,8 @@
       "parcel_registered": "Een pakket is geregistreerd",
       "parcel_status_changed": "De status van een pakket is gewijzigd",
       "parcel_delivery_time_changed": "De verwachte bezorgtijd van een pakket is gewijzigd",
+      "outgoing_parcel_status_changed": "De status van een uitgaand pakket is gewijzigd",
+      "outgoing_parcel_delivered": "Een uitgaand pakket is bezorgd",
       "letter_announced": "Een brief is aangekondigd"
     }
   },

@@ -747,6 +747,70 @@ async def test_fire_change_events_no_delivery_time_event_when_unchanged(hass):
 
 
 # ---------------------------------------------------------------------------
+# _fire_outgoing_change_events
+# ---------------------------------------------------------------------------
+
+
+async def test_fire_outgoing_silent_on_first_refresh(hass):
+    coordinator = _make_coordinator(hass)
+    chg = _capture(hass, "postnl_outgoing_parcel_status_changed")
+    dlv = _capture(hass, "postnl_outgoing_parcel_delivered")
+
+    # _known_outgoing_state is None on a fresh coordinator → suppress.
+    coordinator._fire_outgoing_change_events([_norm("S", "Pakket is onderweg")])
+    await hass.async_block_till_done()
+
+    assert chg == []
+    assert dlv == []
+
+
+async def test_fire_outgoing_emits_status_changed(hass):
+    coordinator = _make_coordinator(hass)
+    coordinator._known_outgoing_state = {"S": ParcelStatus.REGISTERED}
+    captured = _capture(hass, "postnl_outgoing_parcel_status_changed")
+
+    coordinator._fire_outgoing_change_events([_norm("S", "Pakket is onderweg")])
+    await hass.async_block_till_done()
+
+    assert len(captured) == 1
+    payload = captured[0].data
+    assert payload["barcode"] == "S"
+    assert payload["old_status"] == ParcelStatus.REGISTERED
+    assert payload["new_status"] == ParcelStatus.IN_TRANSIT
+
+
+async def test_fire_outgoing_delivered_takes_precedence(hass):
+    coordinator = _make_coordinator(hass)
+    coordinator._known_outgoing_state = {"S": ParcelStatus.IN_TRANSIT}
+    dlv = _capture(hass, "postnl_outgoing_parcel_delivered")
+    chg = _capture(hass, "postnl_outgoing_parcel_status_changed")
+
+    coordinator._fire_outgoing_change_events([
+        _norm("S", "Bezorgd", delivered=True),
+    ])
+    await hass.async_block_till_done()
+
+    assert len(dlv) == 1
+    assert dlv[0].data["barcode"] == "S"
+    assert chg == []
+
+
+async def test_fire_outgoing_no_event_when_unchanged(hass):
+    coordinator = _make_coordinator(hass)
+    coordinator._known_outgoing_state = {"S": ParcelStatus.DELIVERED}
+    dlv = _capture(hass, "postnl_outgoing_parcel_delivered")
+    chg = _capture(hass, "postnl_outgoing_parcel_status_changed")
+
+    coordinator._fire_outgoing_change_events([
+        _norm("S", "Bezorgd", delivered=True),
+    ])
+    await hass.async_block_till_done()
+
+    assert dlv == []
+    assert chg == []
+
+
+# ---------------------------------------------------------------------------
 # _fire_letter_events
 # ---------------------------------------------------------------------------
 

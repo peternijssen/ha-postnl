@@ -282,6 +282,25 @@ re-propose these as improvements:
   documented in the README at all (discoverable in the HA UI). CLAUDE.md
   still documents everything.
 
+### Adopted after 4.4.0 — outgoing events (do not refactor away)
+
+- **Two outgoing events fire from `PostNLCoordinator`**:
+  `postnl_outgoing_parcel_status_changed` and
+  `postnl_outgoing_parcel_delivered`, via `_fire_outgoing_change_events`,
+  over the **full `data['sender']`** list (active + delivered, unfiltered by
+  the delivered-display option) so a hop from in-transit to delivered is
+  visible. Both own sent shipments and returns land in `senderShipments`, so
+  this covers returns for free (see memory `returns_outgoing_parity`). State
+  tracked in `_known_outgoing_state` (barcode → ParcelStatus), `None` on the
+  first refresh for the same suppression reason as `_known_state`.
+- **`delivered` takes precedence over `status_changed`** for the terminal
+  transition (change **to** `ParcelStatus.DELIVERED` fires only `_delivered`).
+  **No outgoing `registered` and no outgoing `delivery_time_changed`** — out
+  of scope. Both carry `device_id`; wired into `device_trigger.py` as
+  `outgoing_parcel_status_changed` / `outgoing_parcel_delivered` (now six
+  device triggers incl. `letter_announced`) with labels under
+  `device_automation.trigger_type`. Kept identical to DHL/DPD suite-wide.
+
 ## Planned for the next major bump
 
 - **Exception translations** (Gold-tier rule). `UpdateFailed(...)`
