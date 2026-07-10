@@ -68,10 +68,12 @@ _STATUS_PATTERNS: tuple[tuple[str, ParcelStatus], ...] = (
 _OBSERVATION_CODE_MAP: dict[str, ParcelStatus] = {
     # --- Pre-receipt baseline (registered) ---
     "A01": ParcelStatus.REGISTERED,       # nog niet ontvangen/verwerkt
+    "A03": ParcelStatus.REGISTERED,       # zending aangemeld (pre-advice)
     "M02": ParcelStatus.REGISTERED,       # nog niet ontvangen/verwerkt (variant of A01)
     # --- In the network (in_transit) ---
     "B01": ParcelStatus.IN_TRANSIT,       # ontvangen door PostNL
     "J01": ParcelStatus.IN_TRANSIT,       # gesorteerd
+    "R01": ParcelStatus.IN_TRANSIT,       # zending is gesorteerd (variant of J01)
     "J04": ParcelStatus.IN_TRANSIT,       # voorgemeld en gescand op rit
     "J21": ParcelStatus.IN_TRANSIT,       # overgedragen aan afhaallocatie (handover, not yet ready)
     "J31": ParcelStatus.IN_TRANSIT,       # ingenomen aan de sorteergoot
@@ -114,6 +116,7 @@ _OBSERVATION_META_CODES: frozenset[str] = frozenset({
     "A96",  # bezorging wijzigen mogelijk
     "A98",  # voorgemelde zending verrijkt door PostNL regie (data enrichment)
     "K33",  # "leeg" placeholder
+    "K50",  # RCS melding (notification)
 })
 
 # New-issue link surfaced in the unknown-status warnings so users can paste a

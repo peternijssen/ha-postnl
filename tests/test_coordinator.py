@@ -926,9 +926,15 @@ def test_map_observation_status_live_catalogue_2026_06_29():
     assert map_observation_status("A80") == ParcelStatus.DELIVERED  # signature = proof of delivery
 
 
+def test_map_observation_status_live_catalogue_2026_07_10():
+    """Milestone codes gathered from a live account on 2026-07-10."""
+    assert map_observation_status("A03") == ParcelStatus.REGISTERED   # zending aangemeld
+    assert map_observation_status("R01") == ParcelStatus.IN_TRANSIT   # zending is gesorteerd
+
+
 def test_map_observation_status_meta_codes_are_silent_null(caplog):
     """Notification/admin codes are known → no movement status, no warning."""
-    for code in ("A04", "A18", "A19", "A25", "A65", "A94", "A95", "A96", "A98", "K33"):
+    for code in ("A04", "A18", "A19", "A25", "A65", "A94", "A95", "A96", "A98", "K33", "K50"):
         assert map_observation_status(code, "some text") is None, code
     assert "issues/new" not in caplog.text  # meta codes must not warn
 
