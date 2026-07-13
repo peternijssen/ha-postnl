@@ -5,8 +5,7 @@
 
 > 💬 Questions or feedback? Join the discussion on the [Home Assistant community](https://community.home-assistant.io/t/packages-postnl-dhl-nl-dpd-and-gls-parcel-integration/112433/).
 
-A custom Home Assistant integration that tracks your PostNL shipments
-and announced MyMail letters.
+A custom Home Assistant integration that tracks your PostNL shipments and announced MyMail letters.
 
 ## Contents
 
