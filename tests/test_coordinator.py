@@ -87,6 +87,16 @@ def test_map_parcel_status_in_transit_for_onderweg():
     assert map_parcel_status({"status_message": "Pakket is onderweg"}) == ParcelStatus.IN_TRANSIT
 
 
+def test_map_parcel_status_failed_delivery_today_is_in_transit():
+    # Reported in issue #6: a delayed/failed attempt maps to IN_TRANSIT,
+    # mirroring the G01/G05/T04 observation codes.
+    message = (
+        "Sorry, bezorgmoment is bijgewerkt. "
+        "Het lukt vandaag niet je pakket te bezorgen."
+    )
+    assert map_parcel_status({"status_message": message}) == ParcelStatus.IN_TRANSIT
+
+
 def test_map_parcel_status_at_pickup_point_for_postnl_punt():
     assert map_parcel_status({"status_message": "Pakket ligt klaar bij PostNL punt"}) == ParcelStatus.AT_PICKUP_POINT
 
