@@ -1,14 +1,44 @@
-venv
-.vscode
-*.code-workspace
-*.pyc
-*.swp
-__pycache__
-env
-.mypy_cache
+# Byte-compiled / optimized
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Packaging / build
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Test, coverage & type-check caches
+.pytest_cache/
+.mypy_cache/
+.dmypy.json
 .coverage
+.coverage.*
 coverage.xml
-.secrets
-.pytest_cache
-docs/api/
+htmlcov/
+.hypothesis/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Environments & secrets
+.env
+
+# Editors / IDEs
+.vscode/
+*.code-workspace
+*.swp
+
+# OS
+.DS_Store
+
+# Claude Code (local)
 .claude/
+
+# Local-only API / reverse-engineering notes (never published)
+docs/api/
