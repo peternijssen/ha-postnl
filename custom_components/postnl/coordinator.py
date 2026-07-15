@@ -58,6 +58,7 @@ _STATUS_PATTERNS: tuple[tuple[str, ParcelStatus], ...] = (
     ("gesorteerd", ParcelStatus.IN_TRANSIT),
     ("onderweg", ParcelStatus.IN_TRANSIT),
     ("bezorgd", ParcelStatus.DELIVERED),
+    ("unknown", ParcelStatus.UNKNOWN),
 )
 
 # History events carry a stable PostNL ``observationCode`` (e.g. ``J05``)

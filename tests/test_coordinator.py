@@ -109,6 +109,13 @@ def test_map_parcel_status_unknown_for_unmapped_string():
     assert map_parcel_status({"status_message": "Verstuurd via warpdrive"}) == ParcelStatus.UNKNOWN
 
 
+def test_map_parcel_status_literal_unknown_is_recognised(caplog):
+    # PostNL itself reports "Unknown" for a not-yet-tracked parcel; treat it as
+    # UNKNOWN without the "help us map it" warning (#9).
+    assert map_parcel_status({"status_message": "Unknown"}) == ParcelStatus.UNKNOWN
+    assert "issues/new" not in caplog.text
+
+
 # ---------------------------------------------------------------------------
 # normalize_parcel
 # ---------------------------------------------------------------------------
