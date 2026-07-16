@@ -1,2 +1,5 @@
-homeassistant
+pytest
+pytest-asyncio
+pytest-homeassistant-custom-component
 gql
+requests
