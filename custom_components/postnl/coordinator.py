@@ -124,7 +124,7 @@ _OBSERVATION_META_CODES: frozenset[str] = frozenset({
 
 # New-issue link surfaced in the unknown-status warnings so users can paste a
 # ready-made line into a bug report.
-_NEW_ISSUE_URL = "https://github.com/peternijssen/ha-postnl/issues/new"
+_NEW_ISSUE_URL = "https://github.com/ha-parcel-integrations/ha-postnl/issues/new"
 
 # One-shot dedupe sets so each distinct unmapped value warns once per HA
 # session rather than on every poll.

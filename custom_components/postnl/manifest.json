@@ -3,10 +3,10 @@
   "name": "PostNL",
   "codeowners": ["@arjenbos", "@peternijssen"],
   "config_flow": true,
-  "documentation": "https://github.com/peternijssen/ha-postnl",
+  "documentation": "https://github.com/ha-parcel-integrations/ha-postnl",
   "integration_type": "hub",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/peternijssen/ha-postnl/issues",
+  "issue_tracker": "https://github.com/ha-parcel-integrations/ha-postnl/issues",
   "quality_scale": "silver",
   "requirements": ["gql", "requests"],
   "version": "4.5.0"
