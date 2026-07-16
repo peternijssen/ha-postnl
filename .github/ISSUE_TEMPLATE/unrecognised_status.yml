@@ -1,0 +1,34 @@
+name: 🏷️ Unrecognised parcel status
+description: The integration logged a warning asking you to report an unrecognised status or event.
+title: "[status] "
+labels: ["unrecognised-status"]
+assignees:
+  - peternijssen
+body:
+  - type: markdown
+    attributes:
+      value: |
+        The integration logs a line such as
+        `[parcel] statusPhase.message=… → reported as 'unknown'` or
+        `[history] observationCode=… text=… → reported as 'unknown'`.
+        Paste that full line below and we'll add it to the mapping.
+  - type: textarea
+    id: logline
+    attributes:
+      label: The log line
+      description: Copy the full "help us map it" warning line from your Home Assistant log.
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Integration version
+      placeholder: "e.g. 4.3.0"
+    validations:
+      required: true
+  - type: input
+    id: ha_version
+    attributes:
+      label: Home Assistant version
+      placeholder: "e.g. 2026.7.0"
