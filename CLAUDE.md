@@ -90,15 +90,22 @@ re-propose these as improvements:
   read these keys; the original transformed PostNL payload lives
   under `raw`.
 - **Events**: the coordinator fires `postnl_parcel_registered`,
-  `postnl_parcel_status_changed`, `postnl_parcel_delivery_time_changed`
-  (added in 4.1.0) and `postnl_letter_announced` on the HA event bus.
+  `postnl_parcel_status_changed`, `postnl_parcel_delivered`,
+  `postnl_parcel_delivery_time_changed` (added in 4.1.0) and
+  `postnl_letter_announced` on the HA event bus.
   All are suppressed on the very first refresh so we do not flood
   users with events for parcels or letters that already existed.
   `_known_letter_ids` mirrors `_known_state` and is reset only after a
   successful letters fetch. `delivery_time_changed` only fires when at
   least one of `planned_from` / `planned_to` ends up with a non-null
   value different from the previous one — value-to-null transitions
-  are intentionally silent.
+  are intentionally silent. Incoming events run over the **full
+  receiver list** (active + delivered, same trick as outgoing), so the
+  terminal hop is visible: a change **to** `ParcelStatus.DELIVERED`
+  fires only `_delivered` (never also `_status_changed`), a barcode
+  first seen already-delivered fires nothing, and `registered` only
+  fires for not-yet-delivered new barcodes. `_known_state` /
+  `_known_delivery_times` track the full receiver list.
 - **`has_entity_name = True`** on every entity, with `translation_key`
   routing names through `strings.json` and the language files. Drop
   `_attr_name` is the rule — translations are the source of truth.

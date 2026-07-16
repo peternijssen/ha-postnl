@@ -637,6 +637,42 @@ async def test_fire_change_events_emits_status_changed(hass):
     assert payload["status"] == ParcelStatus.OUT_FOR_DELIVERY
 
 
+async def test_fire_change_events_delivered_takes_precedence(hass):
+    """The hop to DELIVERED fires parcel_delivered and NOT status_changed."""
+    coordinator = _make_coordinator(hass)
+    coordinator._known_state = {"A": ParcelStatus.OUT_FOR_DELIVERY}
+    delivered = _capture(hass, "postnl_parcel_delivered")
+    changed = _capture(hass, "postnl_parcel_status_changed")
+
+    coordinator._fire_change_events([
+        _norm("A", "Pakket is bezorgd", delivered=True),
+    ])
+    await hass.async_block_till_done()
+
+    assert changed == []
+    assert len(delivered) == 1
+    payload = delivered[0].data
+    assert payload["barcode"] == "A"
+    assert payload["status"] == ParcelStatus.DELIVERED
+
+
+async def test_fire_change_events_silent_for_new_delivered_barcode(hass):
+    """A barcode first seen already delivered fires neither registered nor delivered."""
+    coordinator = _make_coordinator(hass)
+    coordinator._known_state = {"A": ParcelStatus.IN_TRANSIT}
+    reg = _capture(hass, "postnl_parcel_registered")
+    delivered = _capture(hass, "postnl_parcel_delivered")
+
+    coordinator._fire_change_events([
+        _norm("A", "Pakket is onderweg"),
+        _norm("B", "Pakket is bezorgd", delivered=True),
+    ])
+    await hass.async_block_till_done()
+
+    assert reg == []
+    assert delivered == []
+
+
 async def test_fire_change_events_no_event_when_status_unchanged(hass):
     coordinator = _make_coordinator(hass)
     coordinator._known_state = {"A": ParcelStatus.IN_TRANSIT}
