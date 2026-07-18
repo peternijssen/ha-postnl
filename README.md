@@ -248,15 +248,13 @@ logging for the integration:
 
 ## Related integrations
 
-Tracking parcels from other Dutch carriers:
+This integration is part of [**ha-parcel-integrations**](https://github.com/ha-parcel-integrations) — a family of Dutch
+parcel-carrier integrations that all publish the same canonical parcel format,
+statuses and events.
 
-| Integration | Description |
-|---|---|
-| [ha-dhl-nl](https://github.com/ha-parcel-integrations/ha-dhl-nl) | DHL eCommerce NL parcel tracker. |
-| [ha-dpd](https://github.com/ha-parcel-integrations/ha-dpd) | DPD parcel tracker. |
-| [ha-gls](https://github.com/ha-parcel-integrations/ha-gls) | GLS Netherlands parcel tracker — no account, you enter tracking numbers yourself. |
-| [ha-dragonfly](https://github.com/ha-parcel-integrations/ha-dragonfly) | Dragonfly Shipping parcel tracker — no account, you enter tracking numbers yourself. |
-| [ha-parcel-aggregator](https://github.com/ha-parcel-integrations/ha-parcel-aggregator) | Rolls up counts and next-delivery timestamps from all installed carrier integrations into a single set of sensors. |
+- [**Parcel Aggregator**](https://github.com/ha-parcel-integrations/ha-parcel-aggregator) rolls every installed carrier
+  up into one set of sensors.
+- Browse [the organisation](https://github.com/ha-parcel-integrations) for the current list of supported carriers.
 
 ## Disclaimer
 
