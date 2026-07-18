@@ -99,6 +99,7 @@ _OBSERVATION_CODE_MAP: dict[str, ParcelStatus] = {
     "I01": ParcelStatus.DELIVERED,        # pakket is bezorgd
     "I02": ParcelStatus.DELIVERED,        # afgehaald bij PostNL-punt
     "I05": ParcelStatus.DELIVERED,        # bezorgd in de brievenbus
+    "I11": ParcelStatus.DELIVERED,        # zending is bezorgd in de brievenbus (variant of I05)
 }
 
 # Known notification / admin / data events that are NOT a movement milestone.

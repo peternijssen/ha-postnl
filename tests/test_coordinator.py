@@ -1049,6 +1049,12 @@ def test_map_observation_status_live_catalogue_2026_07_10():
     assert map_observation_status("R01") == ParcelStatus.IN_TRANSIT   # zending is gesorteerd
 
 
+def test_map_observation_status_live_catalogue_2026_07_18():
+    """Milestone codes reported by users (issue #11)."""
+    # Letterbox delivery, variant of I05 — was reported as 'unknown'.
+    assert map_observation_status("I11") == ParcelStatus.DELIVERED
+
+
 def test_map_observation_status_meta_codes_are_silent_null(caplog):
     """Notification/admin codes are known → no movement status, no warning."""
     for code in ("A04", "A18", "A19", "A25", "A65", "A94", "A95", "A96", "A98", "K33", "K50"):
