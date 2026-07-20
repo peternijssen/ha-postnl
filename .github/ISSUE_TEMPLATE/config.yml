@@ -1,1 +1,8 @@
 blank_issues_enabled: true
+contact_links:
+  - name: 📦 Request a carrier, or a country we do not cover yet
+    url: https://github.com/ha-parcel-integrations/.github/discussions/new/choose
+    about: Missing a carrier, or want this one in another country? Ask in the organisation discussions — that is also where we look for people with parcels to test against.
+  - name: 💬 Questions & usage help
+    url: https://community.home-assistant.io/t/packages-postnl-dhl-nl-dpd-and-gls-parcel-integration/112433/
+    about: For setup questions and general discussion, please use the Home Assistant community thread.
