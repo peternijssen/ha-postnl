@@ -15,6 +15,7 @@ from homeassistant.util import dt as dt_util
 from . import PostNLConfigEntry
 from .const import DOMAIN
 from .coordinator import PostNLCoordinator
+from .device import build_device_info
 
 # The coordinator fans data out to this entity; no per-entity polling.
 PARALLEL_UPDATES = 0
@@ -23,16 +24,6 @@ PARALLEL_UPDATES = 0
 _DEFAULT_EVENT_DURATION = timedelta(hours=1)
 
 
-def _build_device_info(userinfo: dict[str, Any]) -> DeviceInfo:
-    """Return the DeviceInfo shared with this account's sensors."""
-    email = userinfo.get("email") or ""
-    return DeviceInfo(
-        identifiers={(DOMAIN, userinfo.get("account_id", ""))},
-        name=f"PostNL ({email})" if email else "PostNL",
-        manufacturer="PostNL",
-        entry_type=DeviceEntryType.SERVICE,
-        configuration_url="https://jouw.postnl.nl",
-    )
 
 
 def _parse(value: str | None) -> datetime | None:
@@ -82,7 +73,7 @@ class PostNLDeliveriesCalendar(
         super().__init__(coordinator)
         account_id: str = userinfo.get("account_id", "")
         self._attr_unique_id = f"{account_id}_deliveries"
-        self._attr_device_info = _build_device_info(userinfo)
+        self._attr_device_info = build_device_info(userinfo)
 
     def _events(self) -> list[CalendarEvent]:
         """Build calendar events from the active incoming parcels."""

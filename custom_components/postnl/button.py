@@ -11,26 +11,13 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import PostNLConfigEntry
 from .const import DOMAIN
+from .device import build_device_info
 
 # A manual refresh is a single API round-trip; HA's per-entity throttling
 # adds nothing here.
 PARALLEL_UPDATES = 0
 
 
-def _build_device_info(userinfo: dict[str, Any]) -> DeviceInfo:
-    """Return the DeviceInfo shared with this account's sensors.
-
-    Mirrors ``sensor._build_device_info`` so the button lands on the same
-    ``PostNL (<email>)`` device rather than spawning a second one.
-    """
-    email = userinfo.get("email") or ""
-    return DeviceInfo(
-        identifiers={(DOMAIN, userinfo.get("account_id", ""))},
-        name=f"PostNL ({email})" if email else "PostNL",
-        manufacturer="PostNL",
-        entry_type=DeviceEntryType.SERVICE,
-        configuration_url="https://jouw.postnl.nl",
-    )
 
 
 async def async_setup_entry(
@@ -59,7 +46,7 @@ class PostNLRefreshButton(ButtonEntity):
         userinfo: dict[str, Any] = entry.runtime_data.userinfo
         account_id: str = userinfo.get("account_id", "")
         self._attr_unique_id = f"{account_id}_refresh"
-        self._attr_device_info = _build_device_info(userinfo)
+        self._attr_device_info = build_device_info(userinfo)
 
     async def async_press(self) -> None:
         """Trigger an immediate refresh of the PostNL coordinator."""

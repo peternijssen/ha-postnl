@@ -16,7 +16,7 @@ from homeassistant.util import dt as dt_util
 from . import PostNLConfigEntry
 from .const import DOMAIN
 from .coordinator import PostNLCoordinator
-from .sensor import _build_device_info
+from .device import build_device_info
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -115,7 +115,7 @@ class PostNLLetterImage(CoordinatorEntity[PostNLCoordinator], ImageEntity):
         self._letter_id = letter_id
         account_id: str = userinfo.get("account_id", "")
         self._attr_unique_id = f"{account_id}_letter_image_{letter_id}"
-        self._attr_device_info = _build_device_info(userinfo)
+        self._attr_device_info = build_device_info(userinfo)
         # Use the parsed letter date as the entity's "last updated" timestamp so
         # the state reflects when the letter was announced, not when HA booted.
         # Falls back to utcnow when the date couldn't be parsed.

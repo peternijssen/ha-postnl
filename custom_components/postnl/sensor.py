@@ -17,6 +17,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from . import PostNLConfigEntry
 from .const import DOMAIN
 from .coordinator import PostNLCoordinator
+from .device import build_device_info
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -90,16 +91,6 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-def _build_device_info(userinfo: dict[str, Any]) -> DeviceInfo:
-    """Return DeviceInfo shared by all sensors for this account."""
-    email = userinfo.get("email") or ""
-    return DeviceInfo(
-        identifiers={(DOMAIN, userinfo.get("account_id", ""))},
-        name=f"PostNL ({email})" if email else "PostNL",
-        manufacturer="PostNL",
-        entry_type=DeviceEntryType.SERVICE,
-        configuration_url="https://jouw.postnl.nl",
-    )
 
 
 def _active_receiver(coordinator: PostNLCoordinator) -> list[dict]:
@@ -137,7 +128,7 @@ class PostNLIncomingParcelsSensor(CoordinatorEntity[PostNLCoordinator], SensorEn
         self._async_add_entities = async_add_entities
         account_id: str = userinfo.get("account_id", "")
         self._attr_unique_id = f"{account_id}_incoming_parcels"
-        self._attr_device_info = _build_device_info(userinfo)
+        self._attr_device_info = build_device_info(userinfo)
         self._known_barcodes: set[str] = known_barcodes or set()
 
     @property
@@ -196,7 +187,7 @@ class PostNLParcelSensor(CoordinatorEntity[PostNLCoordinator], SensorEntity):
         account_id: str = userinfo.get("account_id", "")
         self._attr_unique_id = f"{account_id}_{barcode}"
         self._attr_translation_placeholders = {"barcode": barcode}
-        self._attr_device_info = _build_device_info(userinfo)
+        self._attr_device_info = build_device_info(userinfo)
 
     def _get_parcel(self) -> dict | None:
         for parcel in _active_receiver(self.coordinator):
@@ -232,7 +223,7 @@ class PostNLNextDeliverySensor(CoordinatorEntity[PostNLCoordinator], SensorEntit
         super().__init__(coordinator)
         account_id: str = userinfo.get("account_id", "")
         self._attr_unique_id = f"{account_id}_next_delivery"
-        self._attr_device_info = _build_device_info(userinfo)
+        self._attr_device_info = build_device_info(userinfo)
 
     def _delivery_moments(self) -> list[tuple[datetime, dict]]:
         result: list[tuple[datetime, dict]] = []
@@ -283,7 +274,7 @@ class PostNLEnRouteToServicePointSensor(CoordinatorEntity[PostNLCoordinator], Se
         super().__init__(coordinator)
         account_id: str = userinfo.get("account_id", "")
         self._attr_unique_id = f"{account_id}_en_route_to_service_point"
-        self._attr_device_info = _build_device_info(userinfo)
+        self._attr_device_info = build_device_info(userinfo)
 
     def _get_service_point_parcels(self) -> list[dict]:
         return [p for p in _active_receiver(self.coordinator) if p.get("pickup")]
@@ -314,7 +305,7 @@ class PostNLOutgoingParcelsSensor(CoordinatorEntity[PostNLCoordinator], SensorEn
         super().__init__(coordinator)
         account_id: str = userinfo.get("account_id", "")
         self._attr_unique_id = f"{account_id}_outgoing_parcels"
-        self._attr_device_info = _build_device_info(userinfo)
+        self._attr_device_info = build_device_info(userinfo)
 
     def _active_sender(self) -> list[dict]:
         return [p for p in (self.coordinator.data or {}).get("sender", []) if not p.get("delivered")]
@@ -345,7 +336,7 @@ class PostNLDeliveredParcelsSensor(CoordinatorEntity[PostNLCoordinator], SensorE
         super().__init__(coordinator)
         account_id: str = userinfo.get("account_id", "")
         self._attr_unique_id = f"{account_id}_delivered_parcels"
-        self._attr_device_info = _build_device_info(userinfo)
+        self._attr_device_info = build_device_info(userinfo)
 
     @property
     def _parcels(self) -> list[dict]:
@@ -377,7 +368,7 @@ class PostNLOutgoingDeliveredParcelsSensor(CoordinatorEntity[PostNLCoordinator],
         super().__init__(coordinator)
         account_id: str = userinfo.get("account_id", "")
         self._attr_unique_id = f"{account_id}_outgoing_delivered_parcels"
-        self._attr_device_info = _build_device_info(userinfo)
+        self._attr_device_info = build_device_info(userinfo)
 
     @property
     def _parcels(self) -> list[dict]:
@@ -409,7 +400,7 @@ class PostNLLettersSensor(CoordinatorEntity[PostNLCoordinator], SensorEntity):
         super().__init__(coordinator)
         account_id: str = userinfo.get("account_id", "")
         self._attr_unique_id = f"{account_id}_letters"
-        self._attr_device_info = _build_device_info(userinfo)
+        self._attr_device_info = build_device_info(userinfo)
 
     @property
     def _letters(self) -> list[dict]:
@@ -449,7 +440,7 @@ class PostNLLastUpdateSensor(CoordinatorEntity[PostNLCoordinator], SensorEntity)
         super().__init__(coordinator)
         account_id: str = userinfo.get("account_id", "")
         self._attr_unique_id = f"{account_id}_last_update"
-        self._attr_device_info = _build_device_info(userinfo)
+        self._attr_device_info = build_device_info(userinfo)
 
     @property
     def native_value(self) -> datetime | None:
