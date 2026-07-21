@@ -395,6 +395,17 @@ upstream too are filed as separate PRs against `arjenbos/main`.
 integration originated there. Cross-repo coordination is documented
 in `CHANGES.md`.
 
+## Shared conventions
+
+Workflow, commit style, versioning and release notes live in
+[`ha-parcel-integrations/.github/CONVENTIONS.md`](https://github.com/ha-parcel-integrations/.github/blob/main/CONVENTIONS.md)
+and are not repeated here. In short: single-line commit messages, semver, tags
+without a `v` prefix, maintainer-only merges, user-facing release notes.
+
+The structural baseline every carrier repo shares is the
+[`ha-carrier-template`](https://github.com/ha-parcel-integrations/ha-carrier-template)
+scaffold. This repo diverges most: it is a GraphQL-based fork with its own auth, image and letter handling, so several template modules have no counterpart here. That is deliberate.
+
 ## Running tests
 
 ```
